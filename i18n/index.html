@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang='zh-Hant'>
+<head>
+  <meta charset='utf-8' />
+  <meta name='viewport' content='width=device-width, initial-scale=1' />
+  <title>族群數量統計互動系統</title>
+  <link rel='stylesheet' href='./styles.css' />
+</head>
+<body>
+  <main id='app'>
+    <span id='modeLabel' class='hidden' data-i18n='freeObservation'>自由觀察</span>
+    <span id='truthBadge' class='hidden' data-i18n='notRevealedBadge'>未揭曉</span>
+
+    <section class='layout-grid'>
+      <div class='left-column'>
+        <section class='card sim-card'>
+          <div class='language-switcher' aria-label='語言'>
+            <span data-i18n='languageLabel'>語言</span>
+            <button type='button' data-lang='zh'>繁中</button>
+            <button type='button' data-lang='en'>English</button>
+            <button type='button' data-lang='ja'>日本語</button>
+          </div>
+
+          <div id='canvas-container'>
+            <canvas id='simCanvas'></canvas>
+            <div id='gridOverlay' class='grid-overlay hidden'></div>
+            <div id='netPreview' class='hidden'></div>
+          </div>
+
+          <div class='method-grid'>
+            <button data-mode='counting' onclick='setMode(&apos;counting&apos;)' class='mode-btn mode-counting'>
+              <span data-i18n='countingMethod'>直接記數法</span>
+              <small data-i18n='countingDesc'>直接觀察並估算</small>
+            </button>
+            <button data-mode='capture' onclick='setMode(&apos;capture&apos;)' class='mode-btn mode-capture'>
+              <span data-i18n='captureMethod'>捉放法</span>
+              <small data-i18n='captureDesc'>連點兩下使用方形撈網</small>
+            </button>
+            <button data-mode='quadrat' onclick='setMode(&apos;quadrat&apos;)' class='mode-btn mode-quadrat'>
+              <span data-i18n='quadratMethod'>樣區法</span>
+              <small data-i18n='quadratDesc'>點選樣區後自動顯示</small>
+            </button>
+          </div>
+        </section>
+
+        <section class='card setting-card'>
+          <div class='setting-row'>
+            <h2 data-i18n='populationSetting'>生物數量設定</h2>
+            <div class='button-group three'>
+              <button data-level='low' onclick='setPopulationLevel(&apos;low&apos;)' class='level-btn' data-i18n='low'>少</button>
+              <button data-level='medium' onclick='setPopulationLevel(&apos;medium&apos;)' class='level-btn active' data-i18n='medium'>多</button>
+              <button data-level='high' onclick='setPopulationLevel(&apos;high&apos;)' class='level-btn' data-i18n='high'>超多</button>
+            </div>
+          </div>
+
+          <div class='setting-row'>
+            <h2 data-i18n='speedSetting'>生物速度設定</h2>
+            <div class='button-group four'>
+              <button data-speed='0' onclick='setSpeedLevel(0)' class='speed-btn' data-i18n='weed'>雜草</button>
+              <button data-speed='0.5' onclick='setSpeedLevel(0.5)' class='speed-btn' data-i18n='snail'>蝸牛</button>
+              <button data-speed='10' onclick='setSpeedLevel(10)' class='speed-btn active' data-i18n='ant'>螞蟻</button>
+              <button data-speed='100' onclick='setSpeedLevel(100)' class='speed-btn' data-i18n='rocket'>火箭</button>
+            </div>
+          </div>
+        </section>
+
+        <section class='card calculator-card'>
+          <div class='calculator-row'>
+            <button class='calc-btn' onclick='calcInput(&apos;1&apos;)'>1</button>
+            <button class='calc-btn' onclick='calcInput(&apos;2&apos;)'>2</button>
+            <button class='calc-btn' onclick='calcInput(&apos;3&apos;)'>3</button>
+            <button class='calc-btn' onclick='calcInput(&apos;4&apos;)'>4</button>
+            <button class='calc-btn' onclick='calcInput(&apos;5&apos;)'>5</button>
+            <button class='calc-btn' onclick='calcInput(&apos;6&apos;)'>6</button>
+            <button class='calc-btn' onclick='calcInput(&apos;7&apos;)'>7</button>
+            <button class='calc-btn' onclick='calcInput(&apos;8&apos;)'>8</button>
+            <button class='calc-btn' onclick='calcInput(&apos;9&apos;)'>9</button>
+            <button class='calc-btn' onclick='calcInput(&apos;0&apos;)'>0</button>
+            <button class='calc-btn calc-op' onclick='calcInput(&apos;+&apos;)'>＋</button>
+            <button class='calc-btn calc-op' onclick='calcInput(&apos;-&apos;)'>－</button>
+            <button class='calc-btn calc-op' onclick='calcInput(&apos;*&apos;)'>×</button>
+            <button class='calc-btn calc-op' onclick='calcInput(&apos;/&apos;)'>÷</button>
+            <button class='calc-btn calc-eq' onclick='calcEvaluate()'>＝</button>
+            <input id='calculatorDisplay' class='calculator-display' type='text' value='0' readonly aria-label='計算機顯示' data-i18n-aria='calculatorAria' />
+            <button class='calc-btn' onclick='calcClear()'>C</button>
+          </div>
+        </section>
+      </div>
+
+      <aside class='right-column'>
+        <section id='capturePanel' class='card side-card hidden'>
+          <div class='panel-head'>
+            <span id='phaseDisplay' class='pill' data-i18n='notCaptured'>尚未捕捉</span>
+          </div>
+
+          <p class='marked-line'><span data-i18n='markedTotalLabel'>總共已標記數量：</span><span id='markedTotal'>0</span></p>
+
+          <div class='net-box'>
+            <p data-i18n='netOrganisms'>撈網中的生物</p>
+            <canvas id='netCanvas' width='300' height='54'></canvas>
+
+            <div class='net-stats'>
+              <div><span data-i18n='netTotal'>撈網內總數</span><strong id='netCount'>0</strong></div>
+              <div><span data-i18n='netMarked'>撈網內已標記</span><strong id='netMarked'>0</strong></div>
+            </div>
+
+            <div class='capture-actions'>
+              <button onclick='markCaught()' data-i18n='markRelease'>標記／釋放</button>
+              <button onclick='releaseCaught()' data-i18n='directRelease'>直接釋放</button>
+            </div>
+          </div>
+        </section>
+
+        <section id='quadratPanel' class='card side-card hidden'>
+          <div class='quadrat-settings'>
+            <label><span data-i18n='rows'>樣區列數</span><input type='number' id='rows' value='3' min='1' max='10' onchange='updateGrid()' /></label>
+            <span>×</span>
+            <label><span data-i18n='cols'>樣區欄數</span><input type='number' id='cols' value='5' min='1' max='10' onchange='updateGrid()' /></label>
+            <span>=</span>
+            <div><p data-i18n='totalCells'>總樣區數</p><strong id='totalCells'>15</strong></div>
+          </div>
+
+          <div class='table-wrap'>
+            <table>
+              <thead><tr><th data-i18n='openedQuadrat'>已開樣區</th><th data-i18n='quadratCount'>樣區內數量</th></tr></thead>
+              <tbody id='quadratRows'></tbody>
+            </table>
+          </div>
+
+          <div class='average-row'>
+            <span data-i18n='sampleAverage'>平均樣區個數</span>
+            <input id='sampleAverageInput' type='number' min='0' step='0.01' placeholder='自行計算' data-i18n-placeholder='manualCalc' />
+          </div>
+        </section>
+
+        <section class='card side-card result-card'>
+          <p id='estResult' data-i18n='chooseMethod'>請先選擇調查方法</p>
+          <p id='estNote'></p>
+
+          <div class='estimate-row'>
+            <input id='studentEstimate' type='number' min='0' placeholder='我的估算值' data-i18n-placeholder='studentEstimate' />
+            <button id='revealBtn' data-i18n='reveal'>揭曉</button>
+          </div>
+
+          <div id='truthDisplay' class='result-box' data-i18n='notRevealedDisplay'>尚未揭曉</div>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <script src='./app.js'></script>
+</body>
+</html>
