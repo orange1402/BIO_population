@@ -1,0 +1,2048 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>族群數量統計互動系統</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --canvas-bg: #0f172a;
+      --net-size: 82px;
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      margin: 0;
+      background: #f5f5f7;
+      overflow: hidden;
+      color: #1d1d1f;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: geometricPrecision;
+    }
+
+    .glass-card {
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+      backdrop-filter: blur(18px);
+    }
+
+    #app { height: 100vh; overflow: hidden; }
+
+    #canvas-container {
+      position: relative;
+      width: 100%;
+      height: 282px;
+      overflow: hidden;
+      border-radius: 1.1rem;
+      background:
+        radial-gradient(circle at 22% 20%, rgba(34, 211, 238, 0.12), transparent 23%),
+        radial-gradient(circle at 80% 72%, rgba(74, 222, 128, 0.10), transparent 26%),
+        var(--canvas-bg);
+      cursor: default;
+      touch-action: manipulation;
+      user-select: none;
+    }
+
+    #simCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .grid-overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    .grid-cell {
+      border: 1px solid rgba(255, 255, 255, 0.42);
+      background: rgba(2, 6, 23, 0.72);
+      pointer-events: auto;
+      cursor: pointer;
+      transition: background 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .grid-cell:hover {
+      background: rgba(30, 41, 59, 0.58);
+      box-shadow: inset 0 0 0 2px rgba(168, 85, 247, 0.75);
+    }
+
+    .revealed {
+      border: 1px solid rgba(255, 255, 255, 0.42);
+      background: rgba(255, 255, 255, 0.04);
+      pointer-events: none;
+    }
+
+    #netPreview {
+      position: absolute;
+      width: var(--net-size);
+      height: var(--net-size);
+      border: 3px solid rgba(250, 204, 21, 0.95);
+      background:
+        linear-gradient(rgba(250, 204, 21, 0.28) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(250, 204, 21, 0.28) 1px, transparent 1px),
+        rgba(250, 204, 21, 0.10);
+      background-size: 14px 14px;
+      border-radius: 0.35rem;
+      pointer-events: none;
+      z-index: 5;
+      box-shadow: 0 0 0 9999px rgba(2, 6, 23, 0.04), 0 0 24px rgba(250, 204, 21, 0.28);
+    }
+
+    .capture-flash {
+      position: absolute;
+      width: var(--net-size);
+      height: var(--net-size);
+      border-radius: 0.35rem;
+      border: 3px solid rgba(34, 197, 94, 0.95);
+      background: rgba(34, 197, 94, 0.12);
+      pointer-events: none;
+      z-index: 6;
+      animation: flashOut 0.34s ease-out forwards;
+    }
+
+    @keyframes flashOut {
+      0% { opacity: 1; transform: scale(1); }
+      100% { opacity: 0; transform: scale(1.2); }
+    }
+
+    .mode-btn.active,
+    .level-btn.active {
+      transform: translateY(-1px);
+      box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85), 0 8px 18px rgba(0, 0, 0, 0.10);
+      outline: 3px solid rgba(0, 113, 227, 0.18);
+    }
+
+    .result-box {
+      max-height: none;
+      overflow: visible;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.45rem;
+    }
+
+    .metric-card {
+      border-radius: 1rem;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      padding: 0.5rem 0.62rem;
+    }
+
+    .metric-label {
+      font-size: 0.72rem;
+      color: #6e6e73;
+      line-height: 1.2;
+    }
+
+    .metric-value {
+      margin-top: 0.12rem;
+      font-size: 0.98rem;
+      font-weight: 800;
+      color: #1d1d1f;
+    }
+
+
+    .calculator-row {
+      display: flex;
+      align-items: center;
+      gap: 0.38rem;
+      overflow-x: auto;
+      padding-bottom: 0.1rem;
+      scrollbar-width: thin;
+      white-space: nowrap;
+    }
+
+    .calculator-display {
+      width: clamp(8rem, 16vw, 12rem);
+      min-width: 8rem;
+      border: 1px solid rgba(0, 0, 0, 0.10);
+      background: rgba(255, 255, 255, 0.92);
+      border-radius: 0.9rem;
+      padding: 0.5rem 0.75rem;
+      font-size: 1.1rem;
+      font-weight: 800;
+      text-align: right;
+      color: #1d1d1f;
+      outline: none;
+    }
+
+    .calc-btn {
+      flex: 0 0 auto;
+      width: 2.05rem;
+      height: 2.05rem;
+      border-radius: 0.75rem;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      background: rgba(255, 255, 255, 0.78);
+      font-size: 0.92rem;
+      font-weight: 800;
+      color: #1d1d1f;
+      transition: transform 0.12s ease, background 0.12s ease;
+    }
+
+    .calc-btn:hover {
+      background: rgba(255, 255, 255, 0.96);
+      transform: translateY(-1px);
+    }
+
+    .calc-op {
+      background: #1d1d1f;
+      color: white;
+    }
+
+    .calc-eq {
+      width: 2.55rem;
+      background: #0071e3;
+      color: white;
+    }
+
+    .speed-btn.active {
+      background: #1d1d1f;
+      color: white;
+      box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85), 0 8px 18px rgba(0, 0, 0, 0.10);
+      outline: 3px solid rgba(0, 113, 227, 0.18);
+    }
+
+
+    #app {
+      width: 100vw;
+      max-width: none;
+      height: 100dvh;
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+
+    .layout-grid {
+      display: grid !important;
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) !important;
+      gap: 14px;
+      width: 100%;
+      height: calc(100dvh - 24px);
+      align-items: start;
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+
+    .left-column,
+    .right-column {
+      min-width: 0;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      position: static;
+      z-index: auto;
+    }
+
+    .left-column {
+      display: grid;
+      grid-template-rows: auto auto auto;
+      gap: 12px;
+      overflow: hidden;
+    }
+
+    .right-column {
+      display: grid;
+      grid-template-rows: auto auto minmax(0, auto);
+      gap: 12px;
+      overflow: hidden;
+      align-content: start;
+    }
+
+    .left-column > section,
+    .right-column > section {
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+
+    #canvas-container {
+      height: clamp(245px, 36vh, 320px);
+    }
+
+    @media (orientation: portrait), (max-width: 900px) {
+      body { overflow: auto; }
+      #app {
+        height: auto;
+        min-height: 100dvh;
+        overflow: visible;
+      }
+      .layout-grid {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        height: auto;
+        overflow: visible;
+      }
+      .left-column,
+      .right-column,
+      .left-column > section,
+      .right-column > section {
+        overflow: visible;
+      }
+      #canvas-container {
+        height: 275px;
+      }
+    }
+
+    .hidden { display: none !important; }
+
+    .compact-table input {
+      width: 100%;
+      border-radius: 0.75rem;
+      border: 1px solid rgb(203 213 225);
+      padding: 0.45rem 0.6rem;
+      text-align: center;
+      font-weight: 700;
+      outline: none;
+    }
+
+    .compact-table input:focus {
+      border-color: rgb(168 85 247);
+      box-shadow: 0 0 0 3px rgb(243 232 255);
+    }
+
+    /* v24 UI refinement: Japanese minimal interface. Visual layer only; no text or logic changes. */
+    :root {
+      --canvas-bg: #111827;
+      --jp-paper: #f7f3ea;
+      --jp-paper-2: #fbfaf6;
+      --jp-ink: #242424;
+      --jp-ink-soft: #505050;
+      --jp-line: rgba(36, 36, 36, 0.10);
+      --jp-line-strong: rgba(36, 36, 36, 0.16);
+      --jp-shadow: 0 18px 44px rgba(20, 20, 20, 0.075);
+      --jp-shadow-soft: 0 8px 22px rgba(20, 20, 20, 0.055);
+      --jp-radius: 24px;
+      --jp-radius-sm: 16px;
+      --jp-moss: #6f8064;
+      --jp-indigo: #475569;
+      --jp-wisteria: #74638f;
+      --jp-sand: #ede5d5;
+      --jp-rose: #a56c6c;
+      --jp-blue-soft: #eef3f7;
+      --jp-purple-soft: #f2eef6;
+      --jp-green-soft: #eef4ec;
+    }
+
+    html {
+      background: var(--jp-paper);
+    }
+
+    body {
+      background:
+        radial-gradient(circle at 8% 10%, rgba(255, 255, 255, 0.92), transparent 31%),
+        radial-gradient(circle at 86% 6%, rgba(221, 214, 196, 0.34), transparent 29%),
+        linear-gradient(135deg, rgba(36, 36, 36, 0.025) 0 1px, transparent 1px 18px),
+        var(--jp-paper) !important;
+      color: var(--jp-ink) !important;
+      font-family:
+        ui-sans-serif,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        "Noto Sans TC",
+        "Hiragino Sans",
+        "Yu Gothic",
+        sans-serif;
+      letter-spacing: 0.01em;
+    }
+
+    #app {
+      padding: 14px 18px !important;
+    }
+
+    .layout-grid {
+      gap: 18px !important;
+      height: calc(100dvh - 28px) !important;
+      max-width: 1480px;
+      margin: 0 auto;
+    }
+
+    .left-column {
+      gap: 14px !important;
+    }
+
+    .right-column {
+      gap: 14px !important;
+    }
+
+    .glass-card {
+      position: relative;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.90), rgba(251, 250, 246, 0.86)) !important;
+      border: 1px solid var(--jp-line) !important;
+      border-radius: var(--jp-radius) !important;
+      box-shadow: var(--jp-shadow) !important;
+      backdrop-filter: blur(22px) saturate(1.08);
+    }
+
+    .glass-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.58), transparent 34%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.46), transparent 42%);
+      opacity: 0.72;
+    }
+
+    .glass-card > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    .left-column > section:first-child {
+      padding: 14px !important;
+    }
+
+    .left-column > section:nth-child(2),
+    .left-column > section:nth-child(3),
+    .right-column > section {
+      padding: 14px !important;
+    }
+
+    #canvas-container {
+      height: clamp(252px, 39vh, 348px) !important;
+      border-radius: 22px !important;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background:
+        radial-gradient(circle at 18% 22%, rgba(148, 163, 184, 0.16), transparent 24%),
+        radial-gradient(circle at 82% 72%, rgba(111, 128, 100, 0.18), transparent 28%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 18px),
+        var(--canvas-bg) !important;
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+        inset 0 -34px 70px rgba(0, 0, 0, 0.20),
+        0 12px 28px rgba(17, 24, 39, 0.11);
+    }
+
+    #canvas-container::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border-radius: inherit;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.08), transparent 40%),
+        radial-gradient(circle at center, transparent 54%, rgba(0,0,0,0.16));
+      z-index: 3;
+    }
+
+    #simCanvas,
+    #gridOverlay,
+    #netPreview {
+      z-index: 2;
+    }
+
+    #gridOverlay {
+      z-index: 5;
+    }
+
+    #netPreview {
+      z-index: 7;
+      border-color: rgba(237, 218, 142, 0.96) !important;
+      background:
+        linear-gradient(rgba(237, 218, 142, 0.26) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(237, 218, 142, 0.26) 1px, transparent 1px),
+        rgba(237, 218, 142, 0.09) !important;
+      background-size: 14px 14px !important;
+      box-shadow: 0 0 0 9999px rgba(17, 24, 39, 0.04), 0 0 22px rgba(237, 218, 142, 0.22) !important;
+    }
+
+    .grid-cell {
+      border-color: rgba(255, 255, 255, 0.34) !important;
+      background: rgba(17, 24, 39, 0.62) !important;
+    }
+
+    .grid-cell:hover {
+      background: rgba(71, 85, 105, 0.52) !important;
+      box-shadow: inset 0 0 0 2px rgba(221, 214, 196, 0.72) !important;
+    }
+
+    .revealed {
+      border-color: rgba(255, 255, 255, 0.36) !important;
+      background: rgba(255, 255, 255, 0.055) !important;
+    }
+
+    .mode-btn,
+    .level-btn,
+    .speed-btn,
+    .calc-btn,
+    #revealBtn,
+    #capturePanel button,
+    #quadratPanel button {
+      border-radius: 15px !important;
+      border: 1px solid rgba(36, 36, 36, 0.08) !important;
+      box-shadow: var(--jp-shadow-soft);
+      letter-spacing: 0.015em;
+    }
+
+    .mode-btn {
+      padding: 0.72rem 0.92rem !important;
+      min-height: 64px;
+      overflow: hidden;
+    }
+
+    .mode-btn[data-mode="counting"] {
+      background: linear-gradient(135deg, #475569, #334155) !important;
+      color: #fff !important;
+    }
+
+    .mode-btn[data-mode="capture"] {
+      background: linear-gradient(135deg, #71816a, #5f7059) !important;
+      color: #fff !important;
+    }
+
+    .mode-btn[data-mode="quadrat"] {
+      background: linear-gradient(135deg, #786a91, #625574) !important;
+      color: #fff !important;
+    }
+
+    .mode-btn span:last-child {
+      color: rgba(255, 255, 255, 0.74) !important;
+      font-weight: 600 !important;
+    }
+
+    .mode-btn:hover,
+    .level-btn:hover,
+    .speed-btn:hover,
+    .calc-btn:hover,
+    #revealBtn:hover,
+    #capturePanel button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.02);
+    }
+
+    .mode-btn.active,
+    .level-btn.active {
+      transform: translateY(-1px) !important;
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.78),
+        0 12px 28px rgba(36, 36, 36, 0.12) !important;
+      outline: 3px solid rgba(111, 128, 100, 0.17) !important;
+    }
+
+    .level-btn,
+    .speed-btn {
+      background: rgba(255, 255, 255, 0.70) !important;
+      color: var(--jp-ink-soft) !important;
+      min-height: 42px;
+    }
+
+    .level-btn.active,
+    .speed-btn.active,
+    .level-btn.bg-\[\#1d1d1f\],
+    .speed-btn.bg-\[\#1d1d1f\] {
+      background: #2f3230 !important;
+      color: #fff !important;
+    }
+
+    h2 {
+      color: var(--jp-ink) !important;
+      letter-spacing: 0.04em;
+    }
+
+    .left-column > section:nth-child(2) h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .left-column > section:nth-child(2) h2::before {
+      content: "";
+      width: 3px;
+      height: 1.1rem;
+      border-radius: 999px;
+      background: var(--jp-moss);
+      display: inline-block;
+    }
+
+    .calculator-row {
+      gap: 0.42rem !important;
+      padding: 0.08rem 0.04rem 0.2rem !important;
+    }
+
+    .calculator-display {
+      background: rgba(255, 255, 255, 0.84) !important;
+      border: 1px solid var(--jp-line-strong) !important;
+      border-radius: 16px !important;
+      box-shadow: inset 0 1px 2px rgba(36, 36, 36, 0.045);
+      color: var(--jp-ink) !important;
+    }
+
+    .calc-btn {
+      background: rgba(255, 255, 255, 0.66) !important;
+      color: var(--jp-ink) !important;
+      width: 2.16rem !important;
+      height: 2.16rem !important;
+      box-shadow: none !important;
+    }
+
+    .calc-op {
+      background: #3f4544 !important;
+      color: white !important;
+    }
+
+    .calc-eq {
+      width: 2.66rem !important;
+      background: var(--jp-indigo) !important;
+      color: white !important;
+    }
+
+    #capturePanel,
+    #quadratPanel,
+    .right-column > section:last-child {
+      border-radius: 22px !important;
+    }
+
+    #phaseDisplay {
+      background: var(--jp-green-soft) !important;
+      color: #516348 !important;
+      border: 1px solid rgba(111, 128, 100, 0.16);
+    }
+
+    #markedTotal,
+    #netCount {
+      color: #5f7059 !important;
+    }
+
+    #netMarked {
+      color: var(--jp-rose) !important;
+    }
+
+    #capturePanel .border-dashed {
+      background: rgba(248, 247, 241, 0.88) !important;
+      border-color: rgba(36, 36, 36, 0.14) !important;
+      border-style: solid !important;
+    }
+
+    #netCanvas {
+      background: #fbfaf6 !important;
+      border-color: var(--jp-line) !important;
+    }
+
+    #capturePanel .rounded-xl.bg-white,
+    #capturePanel div.rounded-xl.bg-white {
+      background: rgba(255, 255, 255, 0.72) !important;
+      border: 1px solid var(--jp-line);
+    }
+
+    #capturePanel button:first-of-type {
+      background: var(--jp-moss) !important;
+    }
+
+    #capturePanel button:last-of-type {
+      background: #6b6f70 !important;
+    }
+
+    #quadratPanel input,
+    #studentEstimate,
+    #sampleAverageInput,
+    .compact-table input {
+      background: rgba(255, 255, 255, 0.84) !important;
+      border-color: var(--jp-line-strong) !important;
+      border-radius: 15px !important;
+      color: var(--jp-ink) !important;
+      box-shadow: inset 0 1px 2px rgba(36, 36, 36, 0.04);
+    }
+
+    #quadratPanel input:focus,
+    #studentEstimate:focus,
+    #sampleAverageInput:focus,
+    .compact-table input:focus {
+      border-color: rgba(116, 99, 143, 0.52) !important;
+      box-shadow: 0 0 0 4px rgba(116, 99, 143, 0.10) !important;
+    }
+
+    #totalCells,
+    #quadratPanel .bg-purple-50 {
+      background: var(--jp-purple-soft) !important;
+      color: #5f536f !important;
+      border: 1px solid rgba(116, 99, 143, 0.12);
+    }
+
+    .compact-table {
+      border-color: var(--jp-line) !important;
+      background: rgba(255, 255, 255, 0.42);
+    }
+
+    .compact-table thead {
+      background: rgba(247, 243, 234, 0.95) !important;
+      color: var(--jp-ink-soft) !important;
+    }
+
+    .compact-table th {
+      border-color: var(--jp-line) !important;
+      font-weight: 700;
+    }
+
+    .compact-table td {
+      border-color: rgba(36, 36, 36, 0.07) !important;
+    }
+
+    #estResult {
+      margin-top: 0 !important;
+      background: var(--jp-blue-soft) !important;
+      color: #435366 !important;
+      border: 1px solid rgba(71, 85, 105, 0.12);
+      border-radius: 17px !important;
+    }
+
+    #estNote {
+      color: #737373 !important;
+    }
+
+    #revealBtn {
+      background: #2f3230 !important;
+      color: #fff !important;
+      box-shadow: var(--jp-shadow-soft);
+    }
+
+    #truthDisplay {
+      background: #f7eeeb !important;
+      color: #6d4646 !important;
+      border: 1px solid rgba(165, 108, 108, 0.14);
+      border-radius: 18px !important;
+    }
+
+    .metric-grid {
+      gap: 0.58rem !important;
+    }
+
+    .metric-card {
+      background: rgba(255, 255, 255, 0.70) !important;
+      border: 1px solid rgba(36, 36, 36, 0.08) !important;
+      border-radius: 16px !important;
+      padding: 0.64rem 0.68rem !important;
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.52);
+    }
+
+    .metric-label {
+      color: #72706b !important;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    .metric-value {
+      color: var(--jp-ink) !important;
+      font-size: 1.02rem !important;
+      font-weight: 780 !important;
+    }
+
+    ::selection {
+      background: rgba(111, 128, 100, 0.22);
+    }
+
+    @media (orientation: portrait), (max-width: 900px) {
+      #app {
+        padding: 12px !important;
+      }
+
+      .layout-grid {
+        gap: 14px !important;
+        height: auto !important;
+      }
+
+      .left-column,
+      .right-column {
+        gap: 12px !important;
+      }
+
+      #canvas-container {
+        height: 292px !important;
+      }
+
+      .mode-btn {
+        min-height: 62px;
+        padding: 0.68rem 0.72rem !important;
+      }
+
+      .mode-btn span:first-child {
+        font-size: 0.82rem !important;
+      }
+
+      .mode-btn span:last-child {
+        font-size: 0.66rem !important;
+      }
+    }
+
+  
+    /* v26 UI refinement: Apple-like minimal buttons + Japanese summer palette */
+    :root {
+      --summer-paper: #f7fbfb;
+      --summer-paper-2: #fbfaf6;
+      --summer-card: rgba(255, 255, 255, 0.96);
+      --summer-text: #23323a;
+      --summer-text-soft: #5f6f77;
+      --summer-line: rgba(66, 90, 102, 0.12);
+      --summer-line-strong: rgba(66, 90, 102, 0.18);
+      --summer-shadow: 0 1px 2px rgba(33, 43, 54, 0.05), 0 8px 24px rgba(33, 43, 54, 0.03);
+      --summer-blue-soft: #e6f2f8;
+      --summer-blue-active: #d9eaf3;
+      --summer-green-soft: #e9f3e6;
+      --summer-green-active: #dbeed6;
+      --summer-lilac-soft: #f0ebf8;
+      --summer-lilac-active: #e5def3;
+      --summer-sage: #5f7a6f;
+      --summer-sage-dark: #4d675d;
+      --summer-sky: #6d8798;
+      --summer-charcoal: #2f3b42;
+      --summer-pink-soft: #f7efef;
+      --summer-pink-text: #725757;
+    }
+
+    body {
+      background: linear-gradient(180deg, #f5fbfb 0%, #f8f7f1 100%) !important;
+      color: var(--summer-text) !important;
+    }
+
+    #app {
+      padding: 10px 12px !important;
+    }
+
+    .layout-grid {
+      gap: 12px !important;
+      height: calc(100dvh - 20px) !important;
+      max-width: 1520px;
+    }
+
+    .left-column,
+    .right-column {
+      gap: 10px !important;
+    }
+
+    .glass-card {
+      background: var(--summer-card) !important;
+      border: 1px solid var(--summer-line) !important;
+      box-shadow: var(--summer-shadow) !important;
+      border-radius: 22px !important;
+      backdrop-filter: none !important;
+    }
+
+    .glass-card::before {
+      display: none !important;
+    }
+
+    .left-column > section:first-child,
+    .left-column > section:nth-child(2),
+    .left-column > section:nth-child(3),
+    .right-column > section {
+      padding: 12px !important;
+    }
+
+    #canvas-container {
+      border-radius: 20px !important;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06), 0 6px 18px rgba(17, 24, 39, 0.08) !important;
+    }
+
+    #canvas-container::after {
+      background: linear-gradient(180deg, rgba(255,255,255,0.06), transparent 38%), radial-gradient(circle at center, transparent 56%, rgba(0,0,0,0.12)) !important;
+    }
+
+    .mode-btn,
+    .level-btn,
+    .speed-btn,
+    .calc-btn,
+    #revealBtn,
+    #capturePanel button,
+    #quadratPanel button {
+      border-radius: 16px !important;
+      border: 1px solid var(--summer-line) !important;
+      box-shadow: none !important;
+      transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.12s ease !important;
+    }
+
+    .mode-btn:hover,
+    .level-btn:hover,
+    .speed-btn:hover,
+    .calc-btn:hover,
+    #revealBtn:hover,
+    #capturePanel button:hover {
+      transform: translateY(-1px);
+      filter: none !important;
+    }
+
+    .mode-btn {
+      min-height: 72px;
+      padding: 0.88rem 1rem !important;
+      text-align: left;
+    }
+
+    .mode-btn[data-mode="counting"] {
+      background: var(--summer-blue-soft) !important;
+      color: #2f556a !important;
+    }
+
+    .mode-btn[data-mode="capture"] {
+      background: var(--summer-green-soft) !important;
+      color: #3f5f45 !important;
+    }
+
+    .mode-btn[data-mode="quadrat"] {
+      background: var(--summer-lilac-soft) !important;
+      color: #5a5278 !important;
+    }
+
+    .mode-btn span:first-child {
+      color: inherit !important;
+      font-size: 1rem !important;
+      font-weight: 800 !important;
+    }
+
+    .mode-btn span:last-child {
+      color: rgba(48, 69, 81, 0.82) !important;
+      font-size: 0.76rem !important;
+      font-weight: 650 !important;
+    }
+
+    .mode-btn[data-mode="capture"] span:last-child {
+      color: rgba(63, 95, 69, 0.8) !important;
+    }
+
+    .mode-btn[data-mode="quadrat"] span:last-child {
+      color: rgba(90, 82, 120, 0.82) !important;
+    }
+
+    .mode-btn.active {
+      outline: none !important;
+      box-shadow: none !important;
+      transform: none !important;
+    }
+
+    .mode-btn[data-mode="counting"].active {
+      background: var(--summer-blue-active) !important;
+      border-color: #84a9bc !important;
+    }
+
+    .mode-btn[data-mode="capture"].active {
+      background: var(--summer-green-active) !important;
+      border-color: #95b68c !important;
+    }
+
+    .mode-btn[data-mode="quadrat"].active {
+      background: var(--summer-lilac-active) !important;
+      border-color: #a898c6 !important;
+    }
+
+    h2,
+    .text-slate-900,
+    .text-slate-800,
+    .text-slate-700 {
+      color: var(--summer-text) !important;
+    }
+
+    .text-slate-600,
+    .text-slate-500,
+    .text-slate-400 {
+      color: var(--summer-text-soft) !important;
+    }
+
+    .level-btn,
+    .speed-btn {
+      background: rgba(255,255,255,0.92) !important;
+      color: #55646c !important;
+      min-height: 42px;
+      font-weight: 800 !important;
+    }
+
+    .level-btn.active,
+    .speed-btn.active,
+    .level-btn.bg-\[\#1d1d1f\],
+    .speed-btn.bg-\[\#1d1d1f\] {
+      background: var(--summer-sage-dark) !important;
+      border-color: var(--summer-sage-dark) !important;
+      color: #ffffff !important;
+      outline: none !important;
+      box-shadow: none !important;
+      transform: none !important;
+    }
+
+    .left-column > section:nth-child(2) {
+      background: rgba(255,255,255,0.92) !important;
+    }
+
+    .left-column > section:nth-child(2) h2::before {
+      background: var(--summer-sage) !important;
+    }
+
+    .calculator-row {
+      display: grid !important;
+      grid-template-columns: repeat(15, minmax(0, 1fr)) minmax(7.2rem, 1.9fr) minmax(0, 1fr) !important;
+      gap: 0.5rem !important;
+      align-items: center !important;
+      overflow: visible !important;
+      white-space: normal !important;
+      padding: 0 !important;
+    }
+
+    .calc-btn {
+      width: auto !important;
+      min-width: 0 !important;
+      height: 2.9rem !important;
+      background: rgba(255,255,255,0.92) !important;
+      color: var(--summer-text) !important;
+      font-size: 0.98rem !important;
+      font-weight: 800 !important;
+    }
+
+    .calculator-display {
+      width: 100% !important;
+      min-width: 0 !important;
+      height: 2.9rem !important;
+      padding: 0.5rem 0.85rem !important;
+      background: rgba(255,255,255,0.92) !important;
+      border: 1px solid var(--summer-line-strong) !important;
+      border-radius: 16px !important;
+      box-shadow: none !important;
+      color: var(--summer-text) !important;
+    }
+
+    .calc-op {
+      background: #5b7072 !important;
+      border-color: #5b7072 !important;
+      color: #ffffff !important;
+    }
+
+    .calc-eq {
+      width: auto !important;
+      background: var(--summer-sky) !important;
+      border-color: var(--summer-sky) !important;
+      color: #ffffff !important;
+    }
+
+    #capturePanel,
+    #quadratPanel,
+    .right-column > section:last-child {
+      border-radius: 20px !important;
+    }
+
+    #phaseDisplay {
+      background: #e8f2e6 !important;
+      color: #4f6a52 !important;
+      border: 1px solid rgba(79, 106, 82, 0.12) !important;
+    }
+
+    .right-column .mt-2 {
+      margin-top: 0.45rem !important;
+    }
+
+    .right-column .mt-3 {
+      margin-top: 0.7rem !important;
+    }
+
+    #capturePanel .border-dashed {
+      padding: 0.9rem !important;
+      background: #fbfcfa !important;
+      border: 1px solid var(--summer-line-strong) !important;
+    }
+
+    #netCanvas {
+      width: 100% !important;
+      height: auto !important;
+      aspect-ratio: 300 / 54;
+      display: block;
+      background: #ffffff !important;
+      border-color: var(--summer-line) !important;
+    }
+
+    #markedTotal,
+    #netCount {
+      color: #4f6a52 !important;
+      font-weight: 800 !important;
+    }
+
+    #netMarked {
+      color: #b4646d !important;
+      font-weight: 800 !important;
+    }
+
+    #capturePanel .rounded-xl.bg-white,
+    #capturePanel div.rounded-xl.bg-white {
+      background: rgba(255,255,255,0.94) !important;
+      border: 1px solid var(--summer-line) !important;
+    }
+
+    #capturePanel button:first-of-type {
+      background: var(--summer-sage) !important;
+      border-color: var(--summer-sage) !important;
+      color: #fff !important;
+    }
+
+    #capturePanel button:last-of-type {
+      background: #70797d !important;
+      border-color: #70797d !important;
+      color: #fff !important;
+    }
+
+    #quadratPanel input,
+    #studentEstimate,
+    #sampleAverageInput,
+    .compact-table input {
+      background: rgba(255,255,255,0.94) !important;
+      border-color: var(--summer-line-strong) !important;
+      color: var(--summer-text) !important;
+      box-shadow: none !important;
+    }
+
+    #quadratPanel input:focus,
+    #studentEstimate:focus,
+    #sampleAverageInput:focus,
+    .compact-table input:focus {
+      border-color: #89aebd !important;
+      box-shadow: 0 0 0 3px rgba(137, 174, 189, 0.12) !important;
+    }
+
+    #totalCells,
+    #quadratPanel .bg-purple-50 {
+      background: #f3eef9 !important;
+      color: #5a5278 !important;
+      border: 1px solid rgba(90, 82, 120, 0.10) !important;
+    }
+
+    .compact-table {
+      background: rgba(255,255,255,0.86) !important;
+      border-color: var(--summer-line) !important;
+    }
+
+    .compact-table thead {
+      background: #f9faf8 !important;
+      color: var(--summer-text-soft) !important;
+    }
+
+    #estResult {
+      background: #edf5f8 !important;
+      color: #49616d !important;
+      border: 1px solid rgba(73, 97, 109, 0.10) !important;
+    }
+
+    #studentEstimate::placeholder {
+      color: #7a8a93 !important;
+      opacity: 1 !important;
+    }
+
+    #revealBtn {
+      background: var(--summer-charcoal) !important;
+      border-color: var(--summer-charcoal) !important;
+      color: #ffffff !important;
+    }
+
+    #truthDisplay {
+      background: var(--summer-pink-soft) !important;
+      color: var(--summer-pink-text) !important;
+      border: 1px solid rgba(114, 87, 87, 0.10) !important;
+    }
+
+    .metric-card {
+      background: rgba(255,255,255,0.95) !important;
+      border: 1px solid rgba(66, 90, 102, 0.10) !important;
+      box-shadow: none !important;
+    }
+
+    .metric-label {
+      color: #738089 !important;
+      font-weight: 700 !important;
+    }
+
+    .metric-value {
+      color: var(--summer-text) !important;
+      font-weight: 800 !important;
+    }
+
+    @media (max-width: 1320px) {
+      .calculator-row {
+        grid-template-columns: repeat(15, minmax(0, 1fr)) minmax(6.4rem, 1.5fr) minmax(0, 1fr) !important;
+        gap: 0.42rem !important;
+      }
+      .calc-btn,
+      .calculator-display {
+        height: 2.72rem !important;
+      }
+    }
+
+    @media (orientation: portrait), (max-width: 900px) {
+      #app {
+        padding: 10px !important;
+      }
+
+      .layout-grid {
+        gap: 12px !important;
+        height: auto !important;
+      }
+
+      .left-column,
+      .right-column {
+        gap: 10px !important;
+      }
+
+      .mode-btn {
+        min-height: 66px !important;
+        padding: 0.72rem 0.78rem !important;
+      }
+
+      .mode-btn span:first-child {
+        font-size: 0.88rem !important;
+      }
+
+      .mode-btn span:last-child {
+        font-size: 0.68rem !important;
+      }
+
+      .calculator-row {
+        grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+      }
+
+      .calculator-display {
+        grid-column: span 4;
+      }
+    }
+
+  </style>
+</head>
+
+<body class="text-slate-800">
+  <main id="app" class="w-full px-5 py-3">
+    <span id="modeLabel" class="hidden">自由觀察</span>
+    <span id="truthBadge" class="hidden">未揭曉</span>
+    <section class="layout-grid">
+      <div class="left-column">
+        <section class="glass-card rounded-[28px] p-4">
+          <div id="canvas-container">
+            <canvas id="simCanvas"></canvas>
+            <div id="gridOverlay" class="grid-overlay hidden"></div>
+            <div id="netPreview" class="hidden"></div>
+          </div>
+
+          <div class="mt-3 grid grid-cols-3 gap-2">
+            <button data-mode="counting" onclick="setMode('counting')" class="mode-btn rounded-[18px] bg-[#0071e3] px-4 py-2 text-left text-white transition hover:bg-[#0066cc]">
+              <span class="block text-sm font-bold">直接記數法</span>
+              <span class="mt-1 block text-[11px] text-blue-100">直接觀察並估算</span>
+            </button>
+            <button data-mode="capture" onclick="setMode('capture')" class="mode-btn rounded-[18px] bg-[#0a996a] px-4 py-2 text-left text-white transition hover:bg-[#087a56]">
+              <span class="block text-sm font-bold">捉放法</span>
+              <span class="mt-1 block text-[11px] text-emerald-100">連點兩下使用方形撈網</span>
+            </button>
+            <button data-mode="quadrat" onclick="setMode('quadrat')" class="mode-btn rounded-[18px] bg-[#8e35e8] px-4 py-2 text-left text-white transition hover:bg-[#7b2bd1]">
+              <span class="block text-sm font-bold">樣區法</span>
+              <span class="mt-1 block text-[11px] text-purple-100">點選樣區後自動顯示</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="glass-card rounded-[28px] p-4">
+          <div class="grid gap-4 lg:grid-cols-[1fr_1fr]">
+            <div class="grid grid-cols-[110px_1fr] items-center gap-3">
+              <h2 class="text-sm font-bold text-slate-900">生物數量設定</h2>
+              <div class="grid grid-cols-3 gap-2">
+                <button data-level="low" onclick="setPopulationLevel('low')" class="level-btn rounded-[18px] bg-slate-100 px-3 py-2 text-sm font-bold text-slate-800 transition hover:bg-slate-200">少</button>
+                <button data-level="medium" onclick="setPopulationLevel('medium')" class="level-btn rounded-[18px] bg-[#1d1d1f] px-3 py-2 text-sm font-bold text-white transition hover:bg-black">多</button>
+                <button data-level="high" onclick="setPopulationLevel('high')" class="level-btn rounded-[18px] bg-slate-100 px-3 py-2 text-sm font-bold text-slate-800 transition hover:bg-slate-200">超多</button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-[110px_1fr] items-center gap-3">
+              <h2 class="text-sm font-bold text-slate-900">生物速度設定</h2>
+              <div class="grid grid-cols-4 gap-2">
+                <button data-speed="0" onclick="setSpeedLevel(0)" class="speed-btn rounded-[18px] bg-slate-100 px-3 py-2 text-sm font-bold text-slate-800 transition hover:bg-slate-200">雜草</button>
+                <button data-speed="0.5" onclick="setSpeedLevel(0.5)" class="speed-btn rounded-[18px] bg-slate-100 px-3 py-2 text-sm font-bold text-slate-800 transition hover:bg-slate-200">蝸牛</button>
+                <button data-speed="10" onclick="setSpeedLevel(10)" class="speed-btn active rounded-[18px] bg-[#1d1d1f] px-3 py-2 text-sm font-bold text-white transition hover:bg-black">螞蟻</button>
+                <button data-speed="100" onclick="setSpeedLevel(100)" class="speed-btn rounded-[18px] bg-slate-100 px-3 py-2 text-sm font-bold text-slate-800 transition hover:bg-slate-200">火箭</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="glass-card rounded-[28px] p-4">
+          <div class="calculator-row">
+            <button class="calc-btn" onclick="calcInput('1')">1</button>
+            <button class="calc-btn" onclick="calcInput('2')">2</button>
+            <button class="calc-btn" onclick="calcInput('3')">3</button>
+            <button class="calc-btn" onclick="calcInput('4')">4</button>
+            <button class="calc-btn" onclick="calcInput('5')">5</button>
+            <button class="calc-btn" onclick="calcInput('6')">6</button>
+            <button class="calc-btn" onclick="calcInput('7')">7</button>
+            <button class="calc-btn" onclick="calcInput('8')">8</button>
+            <button class="calc-btn" onclick="calcInput('9')">9</button>
+            <button class="calc-btn" onclick="calcInput('0')">0</button>
+            <button class="calc-btn calc-op" onclick="calcInput('+')">＋</button>
+            <button class="calc-btn calc-op" onclick="calcInput('-')">－</button>
+            <button class="calc-btn calc-op" onclick="calcInput('*')">×</button>
+            <button class="calc-btn calc-op" onclick="calcInput('/')">÷</button>
+            <button class="calc-btn calc-eq" onclick="calcEvaluate()">＝</button>
+            <input id="calculatorDisplay" class="calculator-display" type="text" value="0" readonly aria-label="計算機顯示">
+            <button class="calc-btn" onclick="calcClear()">C</button>
+          </div>
+        </section>
+      </div>
+
+      <aside class="right-column">
+        <section id="capturePanel" class="glass-card hidden rounded-[24px] p-3">
+          <div class="flex items-start justify-between gap-3">
+            <span id="phaseDisplay" class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">尚未捕捉</span>
+          </div>
+
+          <p class="mt-2 text-sm font-bold text-slate-700">總共已標記數量：<span id="markedTotal" class="text-emerald-700">0</span></p>
+
+          <div class="mt-2 rounded-[18px] border-2 border-dashed border-slate-300 bg-slate-50 p-3 text-center">
+            <p class="mb-2 text-sm font-semibold text-slate-600">撈網中的生物</p>
+            <canvas id="netCanvas" width="300" height="54" class="mx-auto w-full rounded-xl border border-slate-200 bg-white"></canvas>
+
+            <div class="mt-2 grid grid-cols-2 gap-2 text-sm">
+              <div class="rounded-xl bg-white p-2">
+                <span class="text-slate-500">撈網內總數</span>
+                <span id="netCount" class="ml-1 font-bold text-emerald-700">0</span>
+              </div>
+              <div class="rounded-xl bg-white p-2">
+                <span class="text-slate-500">撈網內已標記</span>
+                <span id="netMarked" class="ml-1 font-bold text-rose-600">0</span>
+              </div>
+            </div>
+
+            <div class="mt-2 grid grid-cols-2 gap-2">
+              <button onclick="markCaught()" class="rounded-xl bg-[#0a996a] px-3 py-2 text-sm font-bold text-white transition hover:bg-[#087a56]">標記／釋放</button>
+              <button onclick="releaseCaught()" class="rounded-xl bg-slate-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-700">直接釋放</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="quadratPanel" class="glass-card hidden rounded-[24px] p-3">
+          <div class="mt-3 grid grid-cols-[1fr_auto_1fr_auto_1fr] items-end gap-2 text-center text-sm font-semibold text-slate-700">
+            <label>樣區列數
+              <input type="number" id="rows" value="3" min="1" max="10" onchange="updateGrid()" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-center outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-100">
+            </label>
+            <span class="pb-2">×</span>
+            <label>樣區欄數
+              <input type="number" id="cols" value="5" min="1" max="10" onchange="updateGrid()" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-center outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-100">
+            </label>
+            <span class="pb-2">=</span>
+            <div>
+              <p>總樣區數</p>
+              <p id="totalCells" class="mt-1 rounded-xl bg-purple-50 px-3 py-2 text-purple-900">15</p>
+            </div>
+          </div>
+
+          <div class="compact-table mt-3 max-h-[190px] overflow-auto rounded-[18px] border border-slate-200">
+            <table class="w-full text-center text-sm">
+              <thead class="sticky top-0 bg-slate-50 text-slate-600">
+                <tr>
+                  <th class="border-b border-slate-200 px-2 py-2">已開樣區</th>
+                  <th class="border-b border-slate-200 px-2 py-2">樣區內數量</th>
+                </tr>
+              </thead>
+              <tbody id="quadratRows">
+                <tr><td colspan="2" class="px-2 py-3 text-slate-400">請點選左側樣區</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="mt-3 grid grid-cols-[1fr_130px] items-center gap-2 rounded-[18px] bg-purple-50 px-4 py-3 text-sm font-bold text-purple-900">
+            <span>平均樣區個數</span>
+            <input id="sampleAverageInput" type="number" min="0" step="0.01" placeholder="自行計算"
+                   class="rounded-xl border border-purple-200 bg-white px-3 py-2 text-center font-bold outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-100">
+          </div>
+        </section>
+
+        <section class="glass-card min-h-0 rounded-[24px] p-3">
+          <p id="estResult" class="mt-2 rounded-[18px] bg-blue-50 px-4 py-2 text-sm font-bold leading-6 text-blue-800">請先選擇調查方法</p>
+          <p id="estNote" class="mt-2 text-xs leading-5 text-slate-500"></p>
+
+          <div class="mt-3 grid grid-cols-[minmax(0,1fr)_72px] gap-2">
+            <input id="studentEstimate" type="number" min="0" placeholder="我的估算值" class="rounded-[18px] border border-slate-300 px-4 py-3 text-lg font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
+            <button id="revealBtn" class="rounded-[18px] bg-[#1d1d1f] px-3 py-3 text-sm font-bold text-white transition hover:bg-black">揭曉</button>
+          </div>
+
+          <div id="truthDisplay" class="result-box mt-3 rounded-[18px] bg-[#fff2f4] px-4 py-3 text-sm leading-6 text-rose-900">尚未揭曉</div>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+
+    let calcExpression = '0';
+    let calcJustEvaluated = false;
+
+    function updateCalculatorDisplay() {
+      $('calculatorDisplay').value = calcExpression.replaceAll('*', '×').replaceAll('/', '÷');
+    }
+
+    function calcInput(value) {
+      const operators = ['+', '-', '*', '/'];
+
+      if (calcExpression === '錯誤') {
+        calcExpression = '0';
+      }
+
+      if (calcJustEvaluated && !operators.includes(value)) {
+        calcExpression = '0';
+      }
+      calcJustEvaluated = false;
+
+      if (value === '.') {
+        const parts = calcExpression.split(/[+\-*/]/);
+        const current = parts[parts.length - 1];
+        if (current.includes('.')) return;
+      }
+
+      if (operators.includes(value)) {
+        const last = calcExpression.slice(-1);
+        if (operators.includes(last)) {
+          calcExpression = calcExpression.slice(0, -1) + value;
+        } else {
+          calcExpression += value;
+        }
+        updateCalculatorDisplay();
+        return;
+      }
+
+      if (calcExpression === '0' && value !== '.') {
+        calcExpression = value;
+      } else {
+        calcExpression += value;
+      }
+
+      updateCalculatorDisplay();
+    }
+
+    function calcClear() {
+      calcExpression = '0';
+      calcJustEvaluated = false;
+      updateCalculatorDisplay();
+    }
+
+    function calcEvaluate() {
+      try {
+        if (!/^[0-9+\-*/. ()]+$/.test(calcExpression)) return;
+        const result = Function(`"use strict"; return (${calcExpression})`)();
+        if (!Number.isFinite(result)) {
+          calcExpression = '錯誤';
+        } else {
+          calcExpression = String(Math.round(result * 1000000) / 1000000);
+        }
+      } catch (error) {
+        calcExpression = '錯誤';
+      }
+      calcJustEvaluated = true;
+      updateCalculatorDisplay();
+    }
+
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+    const netCanvas = document.getElementById('netCanvas');
+    const netCtx = netCanvas.getContext('2d');
+    const container = document.getElementById('canvas-container');
+    const gridOverlay = document.getElementById('gridOverlay');
+    const netPreview = document.getElementById('netPreview');
+
+    const NET_SIZE = 82;
+    const POPULATION_LEVEL_RANGES = {
+      low: [10, 50],
+      medium: [100, 500],
+      high: [1000, 1200]
+    };
+
+    let mode = 'none';
+    let entities = [];
+    let popSize = randomPopulationCount('medium');
+    let populationLevel = 'medium';
+    let speedLevel = 10;
+
+    let net = [];
+    let markedCount = 0;
+    let caughtTotal = 0;
+    let recapturedCount = 0;
+    let captureNumerator = 0;
+    let captureDenominator = 0;
+    let lastCaptureForEstimate = null;
+    let phase = 0;
+    let lastTap = { time: 0, x: -9999, y: -9999 };
+    let quadratSampleNo = 0;
+
+    const $ = (id) => document.getElementById(id);
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function randomInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    function randomPopulationCount(level) {
+      const range = POPULATION_LEVEL_RANGES[level] || POPULATION_LEVEL_RANGES.medium;
+      return randomInt(range[0], range[1]);
+    }
+
+    function randomVelocityVector() {
+      const angle = Math.random() * Math.PI * 2;
+      const baseSpeed = 0.8 + Math.random() * 0.7;
+      return {
+        dx: Math.cos(angle) * baseSpeed,
+        dy: Math.sin(angle) * baseSpeed
+      };
+    }
+
+    function createEntity(isMarked = false) {
+      const v = randomVelocityVector();
+      return {
+        id: (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now() + Math.random()),
+        x: Math.random() * Math.max(1, canvas.width - 24) + 12,
+        y: Math.random() * Math.max(1, canvas.height - 24) + 12,
+        dx: v.dx,
+        dy: v.dy,
+        radius: 4.6 + Math.random() * 1.6,
+        isMarked
+      };
+    }
+
+    function resizeCanvas() {
+      const oldWidth = canvas.width || container.clientWidth || 800;
+      const oldHeight = canvas.height || container.clientHeight || 300;
+      canvas.width = container.clientWidth || 800;
+      canvas.height = container.clientHeight || 300;
+
+      if (entities.length > 0 && oldWidth && oldHeight) {
+        const sx = canvas.width / oldWidth;
+        const sy = canvas.height / oldHeight;
+        entities.forEach((e) => {
+          e.x = clamp(e.x * sx, e.radius, canvas.width - e.radius);
+          e.y = clamp(e.y * sy, e.radius, canvas.height - e.radius);
+        });
+      }
+
+      if (mode === 'quadrat') updateGrid();
+    }
+
+    function setPopulationLevel(level) {
+      populationLevel = level;
+      resetPopulation(randomPopulationCount(level));
+      updateLevelButtons();
+    }
+
+    function updateLevelButtons() {
+      document.querySelectorAll('.level-btn').forEach((btn) => {
+        const isActive = btn.dataset.level === populationLevel;
+        btn.classList.toggle('active', isActive);
+        btn.classList.toggle('bg-[#1d1d1f]', isActive);
+        btn.classList.toggle('text-white', isActive);
+        btn.classList.toggle('hover:bg-black', isActive);
+        btn.classList.toggle('bg-slate-100', !isActive);
+        btn.classList.toggle('text-slate-800', !isActive);
+        btn.classList.toggle('hover:bg-slate-200', !isActive);
+      });
+    }
+
+    function resetPopulation(count) {
+      popSize = count;
+      net = [];
+      entities = Array.from({ length: popSize }, () => createEntity(false));
+      resetMeasurementState(false);
+    }
+
+    function resetMeasurementState(returnNet = true) {
+      if (returnNet && net.length > 0) {
+        entities = entities.concat(net);
+        net = [];
+      }
+
+      entities.forEach((e) => { e.isMarked = false; });
+
+      markedCount = 0;
+      caughtTotal = 0;
+      recapturedCount = 0;
+      captureNumerator = 0;
+      captureDenominator = 0;
+      lastCaptureForEstimate = null;
+      phase = 0;
+      lastTap = { time: 0, x: -9999, y: -9999 };
+      quadratSampleNo = 0;
+
+      $('truthBadge').textContent = '未揭曉';
+      $('truthDisplay').textContent = '尚未揭曉';
+      $('studentEstimate').value = '';
+
+      if ($('phaseDisplay')) $('phaseDisplay').textContent = '尚未捕捉';
+      if ($('markedTotal')) $('markedTotal').textContent = '0';
+      if ($('quadratRows')) $('quadratRows').innerHTML = '<tr><td colspan="2" class="px-2 py-3 text-slate-400">請點選左側樣區</td></tr>';
+      if ($('sampleAverage')) $('sampleAverage').textContent = '--';
+
+      resetEstimateDisplay();
+      drawNetCanvas();
+      updateCaptureStats();
+
+      if (mode === 'quadrat') updateGrid();
+    }
+
+    function setMode(nextMode) {
+      mode = nextMode;
+      resetMeasurementState(true);
+
+      $('capturePanel').classList.toggle('hidden', mode !== 'capture');
+      $('quadratPanel').classList.toggle('hidden', mode !== 'quadrat');
+      gridOverlay.classList.toggle('hidden', mode !== 'quadrat');
+      netPreview.classList.add('hidden');
+
+      document.querySelectorAll('.mode-btn').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.mode === mode);
+      });
+
+      if (mode === 'counting') {
+        $('modeLabel').textContent = '直接記數法';
+        $('estResult').textContent = '直接記數法：請直接觀察並估算生物數量';
+        $('estNote').textContent = '';
+      }
+
+      if (mode === 'capture') {
+        const currentNetMarked = net.filter((n) => n.isMarked).length;
+        const currentCaptureData = {
+          markedTotal: markedCount,
+          captureTotal: net.length,
+          recapturedMarked: currentNetMarked
+        };
+
+        const data = currentCaptureData.captureTotal > 0
+          ? currentCaptureData
+          : lastCaptureForEstimate;
+
+        if (data && data.markedTotal > 0 && data.captureTotal > 0 && data.recapturedMarked > 0) {
+          return {
+            value: Math.round((data.markedTotal * data.captureTotal) / data.recapturedMarked),
+            mean: null,
+            note: `捉放法正確計算：${data.markedTotal} × ${data.captureTotal} ÷ ${data.recapturedMarked}`
+          };
+        }
+
+        return {
+          value: null,
+          mean: null,
+          note: '捉放法資料不足，需有總標記數、捕捉數，且撈網內已標記數不可為 0。'
+        };
+      }
+
+      if (mode === 'quadrat') {
+        $('modeLabel').textContent = '樣區法';
+        $('estResult').textContent = '樣區法：點選樣區，自行計算平均與估計值';
+        $('estNote').textContent = '';
+        updateGrid();
+      }
+    }
+
+    function resetEstimateDisplay() {
+      $('estResult').textContent = '請先選擇調查方法';
+      $('estNote').textContent = '';
+    }
+
+    function updateCaptureStats() {
+      const currentNetMarked = net.filter((n) => n.isMarked).length;
+      if ($('netCount')) $('netCount').textContent = net.length;
+      if ($('netMarked')) $('netMarked').textContent = currentNetMarked;
+      if ($('markedTotal')) $('markedTotal').textContent = markedCount;
+      drawNetCanvas();
+
+      if (mode !== 'capture') return;
+
+      if (phase === 0) {
+        $('phaseDisplay').textContent = net.length > 0 ? '標記階段' : '尚未捕捉';
+        $('estResult').textContent = '捉放法：先捕捉並標記，再進行第二次捕捉';
+        $('estNote').textContent = '';
+        return;
+      }
+
+      $('phaseDisplay').textContent = '第二次捕捉';
+      $('estResult').textContent = '捉放法：總標記數 × 捕捉數 ÷ 撈網內已標記';
+      $('estNote').textContent = '';
+    }
+
+    function drawEntities() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const speedFactor = speedLevel / 10;
+
+      entities.forEach((e) => {
+        if (speedLevel > 0) {
+          e.x += e.dx * speedFactor;
+          e.y += e.dy * speedFactor;
+
+          if (e.x < e.radius || e.x > canvas.width - e.radius) {
+            e.dx *= -1;
+            e.x = clamp(e.x, e.radius, canvas.width - e.radius);
+          }
+
+          if (e.y < e.radius || e.y > canvas.height - e.radius) {
+            e.dy *= -1;
+            e.y = clamp(e.y, e.radius, canvas.height - e.radius);
+          }
+        }
+
+        ctx.beginPath();
+        ctx.fillStyle = e.isMarked ? '#fb7185' : '#22d3ee';
+        ctx.shadowColor = e.isMarked ? 'rgba(251, 113, 133, 0.55)' : 'rgba(34, 211, 238, 0.45)';
+        ctx.shadowBlur = 10;
+        ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.lineWidth = 1.4;
+        ctx.strokeStyle = e.isMarked ? 'rgba(255,255,255,0.90)' : 'rgba(255,255,255,0.50)';
+        ctx.stroke();
+      });
+
+      requestAnimationFrame(drawEntities);
+    }
+
+    function drawNetCanvas() {
+      if (!netCtx) return;
+      netCtx.clearRect(0, 0, netCanvas.width, netCanvas.height);
+      netCtx.fillStyle = '#f8fafc';
+      netCtx.fillRect(0, 0, netCanvas.width, netCanvas.height);
+
+      net.slice(0, 70).forEach((n, i) => {
+        const col = i % 23;
+        const row = Math.floor(i / 23);
+        const x = 10 + col * 12;
+        const y = 12 + row * 17;
+        netCtx.beginPath();
+        netCtx.fillStyle = n.isMarked ? '#fb7185' : '#22d3ee';
+        netCtx.arc(x, y, 4.8, 0, Math.PI * 2);
+        netCtx.fill();
+      });
+
+      if (net.length > 70) {
+        netCtx.fillStyle = '#334155';
+        netCtx.font = 'bold 13px sans-serif';
+        netCtx.fillText(`+${net.length - 70}`, 260, 55);
+      }
+    }
+
+    function getCanvasPoint(event) {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = event.clientX ?? event.touches?.[0]?.clientX;
+      const clientY = event.clientY ?? event.touches?.[0]?.clientY;
+      return {
+        x: clamp(clientX - rect.left, NET_SIZE / 2, canvas.width - NET_SIZE / 2),
+        y: clamp(clientY - rect.top, NET_SIZE / 2, canvas.height - NET_SIZE / 2)
+      };
+    }
+
+    function moveNetPreview(event) {
+      if (mode !== 'capture') {
+        netPreview.classList.add('hidden');
+        return;
+      }
+
+      const point = getCanvasPoint(event);
+      netPreview.style.left = `${point.x - NET_SIZE / 2}px`;
+      netPreview.style.top = `${point.y - NET_SIZE / 2}px`;
+      netPreview.classList.remove('hidden');
+    }
+
+    function captureAt(x, y) {
+      if (mode !== 'capture') return;
+
+      const left = x - NET_SIZE / 2;
+      const right = x + NET_SIZE / 2;
+      const top = y - NET_SIZE / 2;
+      const bottom = y + NET_SIZE / 2;
+      const caught = [];
+      const remaining = [];
+
+      entities.forEach((entity) => {
+        if (entity.x >= left && entity.x <= right && entity.y >= top && entity.y <= bottom) {
+          caught.push(entity);
+        } else {
+          remaining.push(entity);
+        }
+      });
+
+      entities = remaining;
+      net = net.concat(caught);
+
+      if (phase === 1) {
+        const currentNetMarked = net.filter((n) => n.isMarked).length;
+        lastCaptureForEstimate = {
+          markedTotal: markedCount,
+          captureTotal: net.length,
+          recapturedMarked: currentNetMarked
+        };
+      }
+
+      showCaptureFlash(left, top);
+      updateCaptureStats();
+    }
+
+    function showCaptureFlash(left, top) {
+      const flash = document.createElement('div');
+      flash.className = 'capture-flash';
+      flash.style.left = `${left}px`;
+      flash.style.top = `${top}px`;
+      container.appendChild(flash);
+      window.setTimeout(() => flash.remove(), 360);
+    }
+
+    function markCaught() {
+      if (mode !== 'capture' || net.length === 0) return;
+
+      const currentNetMarked = net.filter((n) => n.isMarked).length;
+
+      if (phase === 0) {
+        phase = 1;
+      } else {
+        const markedBeforeThisCatch = markedCount;
+        lastCaptureForEstimate = {
+          markedTotal: markedBeforeThisCatch,
+          captureTotal: net.length,
+          recapturedMarked: currentNetMarked
+        };
+        caughtTotal += net.length;
+        recapturedCount += currentNetMarked;
+        captureNumerator += markedBeforeThisCatch * net.length;
+        captureDenominator += currentNetMarked;
+      }
+
+      net.forEach((entity) => {
+        if (!entity.isMarked) {
+          entity.isMarked = true;
+          markedCount++;
+        }
+      });
+
+      releaseCaught(false);
+      updateCaptureStats();
+    }
+
+    function releaseCaught(resetStudent = true) {
+      if (net.length > 0) {
+        entities = entities.concat(net);
+        net = [];
+      }
+      if (resetStudent && mode === 'capture' && phase === 0) resetEstimateDisplay();
+      updateCaptureStats();
+    }
+
+    function updateGrid() {
+      if (mode !== 'quadrat') return;
+
+      const rows = clamp(parseInt($('rows').value, 10) || 3, 1, 10);
+      const cols = clamp(parseInt($('cols').value, 10) || 5, 1, 10);
+      $('rows').value = rows;
+      $('cols').value = cols;
+      $('totalCells').textContent = rows * cols;
+
+      gridOverlay.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      gridOverlay.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+      gridOverlay.innerHTML = '';
+      quadratSampleNo = 0;
+      $('quadratRows').innerHTML = '<tr><td colspan="2" class="px-2 py-3 text-slate-400">請點選左側樣區</td></tr>';
+      updateQuadratAverage();
+
+      for (let i = 0; i < rows * cols; i++) {
+        const cell = document.createElement('button');
+        cell.type = 'button';
+        cell.className = 'grid-cell';
+        cell.dataset.index = i;
+        cell.addEventListener('click', () => {
+          cell.classList.remove('grid-cell');
+          cell.classList.add('revealed');
+          cell.disabled = true;
+          addQuadratRow(i);
+        });
+        gridOverlay.appendChild(cell);
+      }
+    }
+
+    function countEntitiesInQuadratCell(index) {
+      const rows = parseInt($('rows').value, 10);
+      const cols = parseInt($('cols').value, 10);
+      const cellWidth = canvas.width / cols;
+      const cellHeight = canvas.height / rows;
+      const gridX = index % cols;
+      const gridY = Math.floor(index / cols);
+      const x1 = gridX * cellWidth;
+      const x2 = (gridX + 1) * cellWidth;
+      const y1 = gridY * cellHeight;
+      const y2 = (gridY + 1) * cellHeight;
+
+      return entities.filter((entity) =>
+        entity.x >= x1 && entity.x < x2 && entity.y >= y1 && entity.y < y2
+      ).length;
+    }
+
+    function addQuadratRow(cellIndex) {
+      quadratSampleNo += 1;
+      const sampleCount = countEntitiesInQuadratCell(cellIndex);
+
+      if (quadratSampleNo === 1) {
+        $('quadratRows').innerHTML = '';
+      }
+
+      const tr = document.createElement('tr');
+      tr.dataset.count = String(sampleCount);
+      tr.innerHTML = `
+        <td class="border-t border-slate-100 px-2 py-2 font-bold text-slate-700">${quadratSampleNo}</td>
+        <td class="border-t border-slate-100 px-2 py-2 font-bold text-purple-900">${sampleCount}</td>
+      `;
+      $('quadratRows').appendChild(tr);
+      $('estResult').textContent = '樣區法：N ≈ 平均樣區個數 × 總樣區數';
+      $('estNote').textContent = `總樣區數 ${$('totalCells').textContent}。請根據各樣區內數量自行計算平均與估計值。`;
+      updateQuadratAverage();
+    }
+
+    function getQuadratCounts() {
+      return Array.from(document.querySelectorAll('#quadratRows tr[data-count]'))
+        .map((row) => Number(row.dataset.count))
+        .filter((value) => Number.isFinite(value) && value >= 0);
+    }
+
+    function updateQuadratAverage() {
+      // 平均值改由學生自行計算並輸入。
+    }
+
+    container.addEventListener('pointermove', moveNetPreview);
+    container.addEventListener('pointerleave', () => netPreview.classList.add('hidden'));
+    container.addEventListener('pointerdown', (event) => {
+      if (mode !== 'capture') return;
+      event.preventDefault();
+      moveNetPreview(event);
+
+      const point = getCanvasPoint(event);
+      const now = Date.now();
+      const distance = Math.hypot(point.x - lastTap.x, point.y - lastTap.y);
+
+      if (now - lastTap.time < 340 && distance < 36) {
+        captureAt(point.x, point.y);
+        lastTap = { time: 0, x: -9999, y: -9999 };
+      } else {
+        lastTap = { time: now, x: point.x, y: point.y };
+      }
+    });
+
+    function setSpeedLevel(value) {
+      speedLevel = Number(value);
+      document.querySelectorAll('.speed-btn').forEach((btn) => {
+        const active = Number(btn.dataset.speed) === speedLevel;
+        btn.classList.toggle('active', active);
+        btn.classList.toggle('bg-[#1d1d1f]', active);
+        btn.classList.toggle('text-white', active);
+        btn.classList.toggle('hover:bg-black', active);
+        btn.classList.toggle('bg-slate-100', !active);
+        btn.classList.toggle('text-slate-800', !active);
+        btn.classList.toggle('hover:bg-slate-200', !active);
+      });
+    }
+
+    function getCorrectMethodEstimate() {
+      if (mode === 'counting') {
+        return {
+          value: popSize,
+          mean: null,
+          note: '直接記數法：正確計數值即為真實數量。'
+        };
+      }
+
+      if (mode === 'capture') {
+        const currentNetMarked = net.filter((n) => n.isMarked).length;
+        const currentCaptureData = {
+          markedTotal: markedCount,
+          captureTotal: net.length,
+          recapturedMarked: currentNetMarked
+        };
+
+        const data = currentCaptureData.captureTotal > 0
+          ? currentCaptureData
+          : lastCaptureForEstimate;
+
+        if (data && data.markedTotal > 0 && data.captureTotal > 0 && data.recapturedMarked > 0) {
+          return {
+            value: Math.round((data.markedTotal * data.captureTotal) / data.recapturedMarked),
+            mean: null,
+            note: `捉放法正確計算：${data.markedTotal} × ${data.captureTotal} ÷ ${data.recapturedMarked}`
+          };
+        }
+
+        return {
+          value: null,
+          mean: null,
+          note: '捉放法資料不足：撈網內已標記數不可為 0。'
+        };
+      }
+
+      if (mode === 'quadrat') {
+        const counts = getQuadratCounts();
+        const totalCells = parseInt($('totalCells').textContent, 10);
+
+        if (counts.length > 0 && totalCells > 0) {
+          const sum = counts.reduce((a, b) => a + b, 0);
+          const mean = sum / counts.length;
+          return {
+            value: Math.round(mean * totalCells),
+            mean,
+            note: `樣區法正確計算：平均 ${mean.toFixed(2)} × 總樣區數 ${totalCells}`
+          };
+        }
+
+        return {
+          value: null,
+          mean: null,
+          note: '樣區法資料不足，請至少開啟一個樣區。'
+        };
+      }
+
+      return {
+        value: null,
+        mean: null,
+        note: '請先選擇調查方法。'
+      };
+    }
+
+    $('revealBtn').addEventListener('click', () => {
+      const estimate = Number($('studentEstimate').value);
+      const hasEstimate = Number.isFinite(estimate) && estimate >= 0;
+      const roundedEstimate = hasEstimate ? Math.round(estimate) : '未輸入';
+      const correct = getCorrectMethodEstimate();
+
+      $('truthBadge').textContent = popSize;
+
+      const correctValue = correct.value !== null ? correct.value : '資料不足';
+      const methodError = correct.value !== null
+        ? `${Math.abs(correct.value - popSize)}隻, ${((Math.abs(correct.value - popSize) / popSize) * 100).toFixed(1)}%`
+        : '資料不足';
+
+      const metric = (label, value) => `
+        <div class="metric-card">
+          <div class="metric-label">${label}</div>
+          <div class="metric-value">${value}</div>
+        </div>
+      `;
+
+      $('truthDisplay').innerHTML = `
+        <div class="metric-grid">
+          ${metric('你的估計值', roundedEstimate)}
+          ${metric('正確估計值', correctValue)}
+          ${metric('真實數量', popSize)}
+          ${metric('方法誤差', methodError)}
+        </div>
+      `;
+    });
+
+    window.addEventListener('resize', resizeCanvas);
+
+    window.addEventListener('load', () => {
+      resizeCanvas();
+      updateLevelButtons();
+      setSpeedLevel(speedLevel);
+      resetPopulation(popSize);
+      drawEntities();
+    });
+  </script>
+</body>
+</html>
