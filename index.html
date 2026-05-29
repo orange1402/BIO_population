@@ -725,8 +725,13 @@
       .mode-btn span { font-size: 0.88rem; }
       .mode-btn small { font-size: 0.68rem; }
       .setting-card { grid-template-columns: 1fr; }
-      .calculator-row { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-      .calculator-display { grid-column: span 4; }
+      .calculator-row {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 0.58rem;
+      }
+      .calculator-display {
+        grid-column: span 4;
+      }
       .language-switcher { top: 18px; right: 18px; }
     }
 
@@ -749,6 +754,7 @@
       <div class="left-column">
         <section class="card sim-card">
           <div class="language-switcher" aria-label="語言">
+            <span data-i18n="languageLabel">語言</span>
             <button type="button" data-lang="zh">繁中</button>
             <button type="button" data-lang="en">English</button>
             <button type="button" data-lang="ja">日本語</button>
