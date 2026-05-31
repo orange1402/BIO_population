@@ -770,6 +770,181 @@
       padding-right: 0.28rem;
     }
 
+
+    /* v31: Japanese setting buttons auto-fit without wrapping */
+    html[lang="ja"] .level-btn,
+    html[lang="ja"] .speed-btn {
+      min-width: 0;
+      white-space: nowrap;
+      word-break: keep-all;
+      overflow-wrap: normal;
+      font-size: clamp(0.72rem, 1.35vw, 0.92rem);
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+      padding-left: clamp(0.22rem, 0.65vw, 0.42rem);
+      padding-right: clamp(0.22rem, 0.65vw, 0.42rem);
+    }
+
+    html[lang="ja"] .level-btn[data-level="high"],
+    html[lang="ja"] .speed-btn[data-speed="100"] {
+      font-size: clamp(0.68rem, 1.18vw, 0.86rem);
+      letter-spacing: -0.055em;
+    }
+
+    html[lang="ja"] .speed-btn[data-speed="0.5"] {
+      font-size: clamp(0.66rem, 1.05vw, 0.78rem);
+      letter-spacing: -0.065em;
+    }
+
+
+    /* v32: align quadrat labels at the same height */
+    .quadrat-settings label,
+    .quadrat-settings > div {
+      display: grid;
+      grid-template-rows: auto auto;
+      gap: 4px;
+      align-items: end;
+    }
+
+    .quadrat-settings label span,
+    .quadrat-settings > div p {
+      min-height: 1.25em;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1.2;
+    }
+
+    #totalCells {
+      margin-top: 0;
+    }
+
+
+    /* v33: move language selector out of quadrat area and add title */
+    .sim-card {
+      display: grid;
+      gap: 10px;
+    }
+
+    .sim-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 34px;
+      padding: 0 4px;
+    }
+
+    .sim-topbar h1 {
+      margin: 0;
+      color: var(--text);
+      font-size: clamp(1rem, 1.5vw, 1.22rem);
+      font-weight: 900;
+      letter-spacing: 0.02em;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+
+    .sim-topbar h1::before {
+      content: "";
+      display: inline-block;
+      width: 3px;
+      height: 1.05em;
+      margin-right: 8px;
+      vertical-align: -2px;
+      border-radius: 999px;
+      background: var(--sage);
+    }
+
+    .sim-card .language-switcher {
+      position: static;
+      flex: 0 0 auto;
+      z-index: 1;
+      background: rgba(235, 239, 239, 0.92);
+      border-color: var(--line);
+      backdrop-filter: none;
+    }
+
+    @media (orientation: portrait), (max-width: 900px) {
+      .sim-topbar {
+        min-height: 32px;
+        gap: 8px;
+      }
+
+      .sim-topbar h1 {
+        font-size: clamp(0.9rem, 3.6vw, 1.08rem);
+      }
+
+      .sim-card .language-switcher {
+        transform: scale(0.92);
+        transform-origin: right center;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .sim-topbar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .sim-topbar h1 {
+        white-space: normal;
+      }
+
+      .sim-card .language-switcher {
+        align-self: flex-end;
+      }
+    }
+
+
+    /* v34: center Japanese speed button text */
+    html[lang="ja"] .speed-btn,
+    html[lang="ja"] .level-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    html[lang="ja"] .speed-btn[data-speed="0.5"],
+    html[lang="ja"] .speed-btn[data-speed="100"] {
+      text-align: center;
+      justify-content: center;
+    }
+
+
+    /* v35: keep Japanese reveal button text on one line */
+    html[lang="ja"] #revealBtn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      white-space: nowrap;
+      word-break: keep-all;
+      overflow-wrap: normal;
+      font-size: clamp(0.72rem, 2.45vw, 0.9rem);
+      letter-spacing: -0.05em;
+      line-height: 1.05;
+      padding-left: 0.22rem;
+      padding-right: 0.22rem;
+    }
+
+    html[lang="ja"] .estimate-row {
+      grid-template-columns: minmax(0, 1fr) 88px;
+    }
+
+    @media (max-width: 420px) {
+      html[lang="ja"] .estimate-row {
+        grid-template-columns: minmax(0, 1fr) 84px;
+      }
+
+      html[lang="ja"] #revealBtn {
+        font-size: clamp(0.68rem, 3vw, 0.82rem);
+        letter-spacing: -0.075em;
+      }
+    }
+
   </style>
 </head>
 
@@ -781,10 +956,13 @@
     <section class="layout-grid">
       <div class="left-column">
         <section class="card sim-card">
-          <div class="language-switcher" aria-label="語言">
-            <button type="button" data-lang="zh">繁中</button>
-            <button type="button" data-lang="en">English</button>
-            <button type="button" data-lang="ja">日本語</button>
+          <div class="sim-topbar">
+            <h1 data-i18n="appTitle">族群數量統計方法模擬</h1>
+            <div class="language-switcher" aria-label="語言">
+              <button type="button" data-lang="zh">繁中</button>
+              <button type="button" data-lang="en">English</button>
+              <button type="button" data-lang="ja">日本語</button>
+            </div>
           </div>
 
           <div id="canvas-container">
@@ -921,6 +1099,7 @@
       zh: {
         htmlLang: "zh-Hant",
         title: "族群數量統計互動系統",
+        appTitle: "族群數量統計方法模擬",
         languageLabel: "語言",
         freeObservation: "自由觀察",
         notRevealedBadge: "未揭曉",
@@ -986,6 +1165,7 @@
       en: {
         htmlLang: "en",
         title: "Interactive System for Estimating Population Size",
+        appTitle: "Population Estimation Method Simulation",
         languageLabel: "Language",
         freeObservation: "Free Observation",
         notRevealedBadge: "Not shown yet",
@@ -1051,6 +1231,7 @@
       ja: {
         htmlLang: "ja",
         title: "個体群サイズ推定インタラクティブシステム",
+        appTitle: "個体群推定方法シミュレーション",
         languageLabel: "言語",
         freeObservation: "自由観察",
         notRevealedBadge: "未表示",
@@ -1266,6 +1447,7 @@
     let phase = 0;
     let lastTap = { time: 0, x: -9999, y: -9999 };
     let quadratSampleNo = 0;
+    let quadratSamples = [];
 
     function clamp(value, min, max) {
       return Math.max(min, Math.min(max, value));
@@ -1318,7 +1500,7 @@
         });
       }
 
-      if (mode === "quadrat") updateGrid();
+      if (mode === "quadrat") updateGrid(true);
     }
 
     function setPopulationLevel(level) {
@@ -1364,6 +1546,7 @@
       phase = 0;
       lastTap = { time: 0, x: -9999, y: -9999 };
       quadratSampleNo = 0;
+      quadratSamples = [];
 
       $("truthBadge").textContent = t("notRevealedBadge");
       $("truthDisplay").textContent = t("notRevealedDisplay");
@@ -1604,7 +1787,7 @@
       $("quadratRows").innerHTML = `<tr class="empty-row"><td colspan="2">${t("clickLeftQuadrat")}</td></tr>`;
     }
 
-    function updateGrid() {
+    function updateGrid(preserveSamples = false) {
       if (mode !== "quadrat") return;
 
       const rows = clamp(parseInt($("rows").value, 10) || 3, 1, 10);
@@ -1617,20 +1800,35 @@
       gridOverlay.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
       gridOverlay.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
       gridOverlay.innerHTML = "";
-      quadratSampleNo = 0;
-      resetQuadratRows();
+
+      if (!preserveSamples) {
+        quadratSamples = [];
+        quadratSampleNo = 0;
+        resetQuadratRows();
+      } else {
+        quadratSampleNo = quadratSamples.length;
+      }
+
+      const selectedIndexes = new Set(quadratSamples.map((sample) => sample.cellIndex));
 
       for (let i = 0; i < rows * cols; i++) {
         const cell = document.createElement("button");
         cell.type = "button";
-        cell.className = "grid-cell";
         cell.dataset.index = i;
-        cell.addEventListener("click", () => {
-          cell.classList.remove("grid-cell");
-          cell.classList.add("revealed");
+
+        if (selectedIndexes.has(i)) {
+          cell.className = "revealed";
           cell.disabled = true;
-          addQuadratRow(i);
-        });
+        } else {
+          cell.className = "grid-cell";
+          cell.addEventListener("click", () => {
+            cell.classList.remove("grid-cell");
+            cell.classList.add("revealed");
+            cell.disabled = true;
+            addQuadratRow(i);
+          });
+        }
+
         gridOverlay.appendChild(cell);
       }
     }
@@ -1655,6 +1853,7 @@
     function addQuadratRow(cellIndex) {
       quadratSampleNo += 1;
       const sampleCount = countEntitiesInQuadratCell(cellIndex);
+      quadratSamples.push({ cellIndex, count: sampleCount });
 
       if (quadratSampleNo === 1) {
         $("quadratRows").innerHTML = "";
