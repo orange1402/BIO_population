@@ -1,1 +1,2800 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>族群數量統計互動系統</title>
+  <style>
+    :root {
+      --canvas-bg: #111827;
+      --net-size: 82px;
+      --paper: #f6fbfb;
+      --paper-warm: #fbfaf5;
+      --card: rgba(255, 255, 255, 0.96);
+      --text: #23323a;
+      --soft: #607179;
+      --line: rgba(66, 90, 102, 0.14);
+      --line-strong: rgba(66, 90, 102, 0.22);
+      --shadow: 0 1px 2px rgba(33, 43, 54, 0.05), 0 8px 24px rgba(33, 43, 54, 0.035);
+      --blue: #e6f2f8;
+      --blue-active: #d9eaf3;
+      --green: #e9f3e6;
+      --green-active: #dbeed6;
+      --lilac: #f0ebf8;
+      --lilac-active: #e5def3;
+      --sage: #5f7a6f;
+      --sage-dark: #4d675d;
+      --sky: #6d8798;
+      --charcoal: #2f3b42;
+      --rose-bg: #f7efef;
+      --rose-text: #725757;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background: linear-gradient(180deg, var(--paper) 0%, #f8f7f1 100%);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "Hiragino Sans", "Yu Gothic", sans-serif;
+      letter-spacing: 0.01em;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: geometricPrecision;
+    }
+
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    .hidden { display: none !important; }
+
+    #app {
+      width: 100vw;
+      height: 100dvh;
+      padding: 10px 12px;
+      overflow: hidden;
+    }
+
+    .layout-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+      gap: 12px;
+      height: calc(100dvh - 20px);
+      max-width: 1520px;
+      margin: 0 auto;
+      align-items: start;
+      overflow: hidden;
+    }
+
+    .left-column,
+    .right-column {
+      min-width: 0;
+      display: grid;
+      gap: 10px;
+    }
+
+    .left-column {
+      grid-template-rows: auto auto auto;
+      overflow: hidden;
+    }
+
+    .right-column {
+      grid-template-rows: auto auto minmax(0, auto);
+      align-content: start;
+      overflow: hidden;
+    }
+
+    .card {
+      position: relative;
+      width: 100%;
+      max-width: 100%;
+      padding: 12px;
+      overflow: hidden;
+      border-radius: 22px;
+      border: 1px solid var(--line);
+      background: var(--card);
+      box-shadow: var(--shadow);
+    }
+
+    .language-switcher {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      z-index: 12;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.34);
+      background: rgba(255,255,255,0.86);
+      backdrop-filter: blur(10px);
+    }
+
+    .language-switcher span {
+      padding: 0 6px;
+      color: var(--soft);
+      font-size: 0.76rem;
+      font-weight: 750;
+    }
+
+    .language-switcher button {
+      min-width: 52px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--soft);
+      padding: 5px 9px;
+      font-size: 0.78rem;
+      font-weight: 850;
+    }
+
+    .language-switcher button.active {
+      background: var(--charcoal);
+      color: #fff;
+    }
+
+    #canvas-container {
+      position: relative;
+      width: 100%;
+      height: clamp(252px, 39vh, 348px);
+      overflow: hidden;
+      border-radius: 20px;
+      background:
+        radial-gradient(circle at 18% 22%, rgba(148, 163, 184, 0.16), transparent 24%),
+        radial-gradient(circle at 82% 72%, rgba(111, 128, 100, 0.18), transparent 28%),
+        linear-gradient(135deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 18px),
+        var(--canvas-bg);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06), 0 6px 18px rgba(17, 24, 39, 0.08);
+      touch-action: manipulation;
+      user-select: none;
+    }
+
+    #canvas-container::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border-radius: inherit;
+      z-index: 3;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.06), transparent 38%),
+        radial-gradient(circle at center, transparent 56%, rgba(0,0,0,0.12));
+    }
+
+    #simCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 2;
+    }
+
+    .grid-overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    .grid-cell {
+      border: 1px solid rgba(255,255,255,0.34);
+      background: rgba(17,24,39,0.62);
+      pointer-events: auto;
+      transition: background 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .grid-cell:hover {
+      background: rgba(71,85,105,0.52);
+      box-shadow: inset 0 0 0 2px rgba(221,214,196,0.72);
+    }
+
+    .revealed {
+      border: 1px solid rgba(255,255,255,0.36);
+      background: rgba(255,255,255,0.055);
+      pointer-events: none;
+    }
+
+    #netPreview {
+      position: absolute;
+      width: var(--net-size);
+      height: var(--net-size);
+      border: 3px solid rgba(237,218,142,0.96);
+      background:
+        linear-gradient(rgba(237,218,142,0.26) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(237,218,142,0.26) 1px, transparent 1px),
+        rgba(237,218,142,0.09);
+      background-size: 14px 14px;
+      border-radius: 0.35rem;
+      pointer-events: none;
+      z-index: 7;
+    }
+
+    .capture-flash {
+      position: absolute;
+      width: var(--net-size);
+      height: var(--net-size);
+      border: 3px solid rgba(95,122,111,0.95);
+      background: rgba(95,122,111,0.13);
+      border-radius: 0.35rem;
+      pointer-events: none;
+      z-index: 8;
+      animation: flashOut 0.34s ease-out forwards;
+    }
+
+    @keyframes flashOut {
+      from { opacity: 1; transform: scale(1); }
+      to { opacity: 0; transform: scale(1.2); }
+    }
+
+    .method-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .mode-btn,
+    .level-btn,
+    .speed-btn,
+    .calc-btn,
+    #revealBtn,
+    .capture-actions button {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: none;
+      transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.12s ease;
+    }
+
+    .mode-btn:hover,
+    .level-btn:hover,
+    .speed-btn:hover,
+    .calc-btn:hover,
+    #revealBtn:hover,
+    .capture-actions button:hover {
+      transform: translateY(-1px);
+    }
+
+    .mode-btn {
+      min-height: 72px;
+      padding: 0.88rem 1rem;
+      text-align: left;
+    }
+
+    .mode-btn span {
+      display: block;
+      font-weight: 850;
+      font-size: 1rem;
+    }
+
+    .mode-btn small {
+      display: block;
+      margin-top: 0.28rem;
+      font-size: 0.76rem;
+      font-weight: 650;
+      line-height: 1.25;
+    }
+
+    .mode-counting { background: var(--blue); color: #2f556a; }
+    .mode-capture { background: var(--green); color: #3f5f45; }
+    .mode-quadrat { background: var(--lilac); color: #5a5278; }
+    .mode-counting small { color: rgba(48,69,81,0.82); }
+    .mode-capture small { color: rgba(63,95,69,0.80); }
+    .mode-quadrat small { color: rgba(90,82,120,0.82); }
+    .mode-counting.active { background: var(--blue-active); border-color: #84a9bc; }
+    .mode-capture.active { background: var(--green-active); border-color: #95b68c; }
+    .mode-quadrat.active { background: var(--lilac-active); border-color: #a898c6; }
+
+    .setting-card {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      background: rgba(255,255,255,0.92);
+    }
+
+    .setting-row {
+      display: grid;
+      grid-template-columns: 118px 1fr;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h2 {
+      margin: 0;
+      color: var(--text);
+      font-size: 0.9rem;
+      font-weight: 850;
+    }
+
+    h2::before {
+      content: "";
+      display: inline-block;
+      width: 3px;
+      height: 1.05rem;
+      margin-right: 8px;
+      vertical-align: -2px;
+      border-radius: 999px;
+      background: var(--sage);
+    }
+
+    .button-group {
+      display: grid;
+      gap: 8px;
+    }
+
+    .button-group.three { grid-template-columns: repeat(3, 1fr); }
+    .button-group.four { grid-template-columns: repeat(4, 1fr); }
+
+    .level-btn,
+    .speed-btn {
+      min-height: 42px;
+      padding: 0.48rem 0.4rem;
+      background: rgba(255,255,255,0.92);
+      color: #55646c;
+      font-weight: 850;
+    }
+
+    .level-btn.active,
+    .speed-btn.active {
+      background: var(--sage-dark);
+      border-color: var(--sage-dark);
+      color: #fff;
+    }
+
+    .calculator-row {
+      display: grid;
+      grid-template-columns: repeat(15, minmax(0, 1fr)) minmax(7.2rem, 1.9fr) minmax(0, 1fr);
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .calc-btn {
+      min-width: 0;
+      height: 2.9rem;
+      background: rgba(255,255,255,0.92);
+      color: var(--text);
+      font-size: 0.98rem;
+      font-weight: 850;
+    }
+
+    .calc-op {
+      background: #5b7072;
+      border-color: #5b7072;
+      color: #fff;
+    }
+
+    .calc-eq {
+      background: var(--sky);
+      border-color: var(--sky);
+      color: #fff;
+    }
+
+    .calculator-display {
+      width: 100%;
+      min-width: 0;
+      height: 2.9rem;
+      padding: 0.5rem 0.85rem;
+      border: 1px solid var(--line-strong);
+      border-radius: 16px;
+      background: rgba(255,255,255,0.92);
+      color: var(--text);
+      text-align: right;
+      font-size: 1.1rem;
+      font-weight: 850;
+      outline: none;
+    }
+
+    .side-card {
+      border-radius: 20px;
+      padding: 10px;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 0.25rem 0.75rem;
+      border-radius: 999px;
+      border: 1px solid rgba(79,106,82,0.12);
+      background: #e8f2e6;
+      color: #4f6a52;
+      font-size: 0.78rem;
+      font-weight: 850;
+    }
+
+    .marked-line {
+      margin: 0.45rem 0 0;
+      color: var(--text);
+      font-size: 0.9rem;
+      font-weight: 850;
+    }
+
+    .marked-line #markedTotal { color: #4f6a52; }
+
+    .net-box {
+      margin-top: 0.45rem;
+      padding: 0.82rem;
+      border: 1px solid var(--line-strong);
+      border-radius: 18px;
+      background: #fbfcfa;
+      text-align: center;
+    }
+
+    .net-box p {
+      margin: 0 0 0.5rem;
+      color: var(--soft);
+      font-size: 0.9rem;
+      font-weight: 750;
+    }
+
+    #netCanvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 300 / 54;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+    }
+
+    .net-stats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-top: 8px;
+      font-size: 0.86rem;
+    }
+
+    .net-stats div {
+      display: flex;
+      justify-content: center;
+      gap: 4px;
+      padding: 0.52rem 0.4rem;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.94);
+    }
+
+    .net-stats span { color: var(--soft); }
+    .net-stats strong { color: #4f6a52; }
+    #netMarked { color: #b4646d; }
+
+    .capture-actions {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .capture-actions button {
+      min-height: 38px;
+      color: #fff;
+      font-size: 0.9rem;
+      font-weight: 850;
+    }
+
+    .capture-actions button:first-child {
+      background: var(--sage);
+      border-color: var(--sage);
+    }
+
+    .capture-actions button:last-child {
+      background: #70797d;
+      border-color: #70797d;
+    }
+
+    .quadrat-settings {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto 1fr;
+      align-items: end;
+      gap: 8px;
+      text-align: center;
+      color: var(--soft);
+      font-size: 0.86rem;
+      font-weight: 750;
+    }
+
+    .quadrat-settings label {
+      display: grid;
+      gap: 4px;
+    }
+
+    .quadrat-settings input,
+    .average-row input,
+    #studentEstimate {
+      min-width: 0;
+      width: 100%;
+      border: 1px solid var(--line-strong);
+      border-radius: 15px;
+      background: rgba(255,255,255,0.94);
+      color: var(--text);
+      padding: 0.62rem 0.7rem;
+      text-align: center;
+      font-weight: 850;
+      outline: none;
+    }
+
+    .quadrat-settings input:focus,
+    .average-row input:focus,
+    #studentEstimate:focus {
+      border-color: #89aebd;
+      box-shadow: 0 0 0 3px rgba(137,174,189,0.12);
+    }
+
+    #totalCells {
+      display: block;
+      margin-top: 4px;
+      border: 1px solid rgba(90,82,120,0.10);
+      border-radius: 12px;
+      background: #f3eef9;
+      color: #5a5278;
+      padding: 0.62rem 0.5rem;
+    }
+
+    .table-wrap {
+      margin-top: 0.7rem;
+      max-height: 190px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.86);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: center;
+      font-size: 0.88rem;
+    }
+
+    thead {
+      position: sticky;
+      top: 0;
+      background: #f9faf8;
+      color: var(--soft);
+    }
+
+    th, td {
+      padding: 0.62rem 0.45rem;
+      border-bottom: 1px solid rgba(66,90,102,0.09);
+    }
+
+    td {
+      color: var(--text);
+      font-weight: 850;
+    }
+
+    .empty-row td {
+      color: var(--soft);
+      font-weight: 700;
+    }
+
+    .average-row {
+      display: grid;
+      grid-template-columns: 1fr 130px;
+      align-items: center;
+      gap: 8px;
+      margin-top: 0.7rem;
+      padding: 0.65rem 0.75rem;
+      border: 1px solid rgba(90,82,120,0.10);
+      border-radius: 18px;
+      background: #f3eef9;
+      color: #5a5278;
+      font-size: 0.9rem;
+      font-weight: 850;
+    }
+
+    #estResult {
+      margin: 0;
+      padding: 0.65rem 0.8rem;
+      border: 1px solid rgba(73,97,109,0.10);
+      border-radius: 17px;
+      background: #edf5f8;
+      color: #49616d;
+      font-size: 0.9rem;
+      font-weight: 850;
+      line-height: 1.5;
+    }
+
+    #estNote {
+      min-height: 0;
+      margin: 0.45rem 0 0;
+      color: var(--soft);
+      font-size: 0.78rem;
+      line-height: 1.55;
+    }
+
+    .estimate-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 76px;
+      gap: 8px;
+      margin-top: 0.7rem;
+    }
+
+    #studentEstimate {
+      height: 3rem;
+      padding: 0.55rem 0.85rem;
+      font-size: 1.05rem;
+      text-align: left;
+    }
+
+    #studentEstimate::placeholder,
+    .average-row input::placeholder {
+      color: #7a8a93;
+      opacity: 1;
+    }
+
+    #revealBtn {
+      border-color: var(--charcoal);
+      background: var(--charcoal);
+      color: #fff;
+      font-size: 0.9rem;
+      font-weight: 850;
+    }
+
+    .result-box {
+      margin-top: 0.7rem;
+      min-height: 62px;
+      padding: 0.8rem;
+      border: 1px solid rgba(114,87,87,0.10);
+      border-radius: 18px;
+      background: var(--rose-bg);
+      color: var(--rose-text);
+      font-size: 0.88rem;
+      line-height: 1.5;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+    }
+
+    .metric-card {
+      padding: 0.62rem 0.68rem;
+      border: 1px solid rgba(66,90,102,0.10);
+      border-radius: 16px;
+      background: rgba(255,255,255,0.95);
+    }
+
+    .metric-label {
+      color: #738089;
+      font-size: 0.72rem;
+      font-weight: 750;
+      line-height: 1.25;
+    }
+
+    .metric-value {
+      margin-top: 0.14rem;
+      color: var(--text);
+      font-size: 1rem;
+      font-weight: 850;
+    }
+
+    @media (max-width: 1320px) {
+      .calculator-row {
+        grid-template-columns: repeat(15, minmax(0, 1fr)) minmax(6.4rem, 1.5fr) minmax(0, 1fr);
+        gap: 0.42rem;
+      }
+
+      .calc-btn,
+      .calculator-display {
+        height: 2.72rem;
+      }
+    }
+
+    @media (orientation: portrait), (max-width: 900px) {
+      body { overflow: auto; }
+
+      #app {
+        height: auto;
+        min-height: 100dvh;
+        overflow: visible;
+        padding: 10px;
+      }
+
+      .layout-grid {
+        grid-template-columns: 1fr;
+        height: auto;
+        overflow: visible;
+        gap: 12px;
+      }
+
+      .left-column,
+      .right-column,
+      .card {
+        overflow: visible;
+      }
+
+      #canvas-container { height: 292px; }
+      .method-grid { grid-template-columns: repeat(3, 1fr); }
+
+      .mode-btn {
+        min-height: 66px;
+        padding: 0.72rem 0.78rem;
+      }
+
+      .mode-btn span { font-size: 0.88rem; }
+      .mode-btn small { font-size: 0.68rem; }
+      .setting-card { grid-template-columns: 1fr; }
+      .calculator-row {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 0.58rem;
+      }
+      .calculator-display {
+        grid-column: span 4;
+      }
+      .language-switcher { top: 18px; right: 18px; }
+    }
+
+    @media (max-width: 560px) {
+      .method-grid { grid-template-columns: 1fr; }
+      .setting-row { grid-template-columns: 1fr; }
+      .quadrat-settings { grid-template-columns: 1fr; }
+      .quadrat-settings > span { display: none; }
+      .average-row { grid-template-columns: 1fr; }
+    }
+
+    /* v29: refine multi-line setting labels and Japanese button fit */
+    h2 {
+      display: flex;
+      align-items: stretch;
+      gap: 8px;
+      line-height: 1.15;
+    }
+
+    h2::before {
+      flex: 0 0 3px;
+      width: 3px;
+      height: auto;
+      min-height: 1.05rem;
+      margin-right: 0;
+      align-self: stretch;
+      vertical-align: 0;
+    }
+
+    html[lang="ja"] .speed-btn[data-speed="0.5"] {
+      font-size: 0.74rem;
+      letter-spacing: 0;
+      line-height: 1.05;
+      white-space: nowrap;
+      padding-left: 0.28rem;
+      padding-right: 0.28rem;
+    }
+
+
+    /* v31: Japanese setting buttons auto-fit without wrapping */
+    html[lang="ja"] .level-btn,
+    html[lang="ja"] .speed-btn {
+      min-width: 0;
+      white-space: nowrap;
+      word-break: keep-all;
+      overflow-wrap: normal;
+      font-size: clamp(0.72rem, 1.35vw, 0.92rem);
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+      padding-left: clamp(0.22rem, 0.65vw, 0.42rem);
+      padding-right: clamp(0.22rem, 0.65vw, 0.42rem);
+    }
+
+    html[lang="ja"] .level-btn[data-level="high"],
+    html[lang="ja"] .speed-btn[data-speed="100"] {
+      font-size: clamp(0.68rem, 1.18vw, 0.86rem);
+      letter-spacing: -0.055em;
+    }
+
+    html[lang="ja"] .speed-btn[data-speed="0.5"] {
+      font-size: clamp(0.66rem, 1.05vw, 0.78rem);
+      letter-spacing: -0.065em;
+    }
+
+
+    /* v32: align quadrat labels at the same height */
+    .quadrat-settings label,
+    .quadrat-settings > div {
+      display: grid;
+      grid-template-rows: auto auto;
+      gap: 4px;
+      align-items: end;
+    }
+
+    .quadrat-settings label span,
+    .quadrat-settings > div p {
+      min-height: 1.25em;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1.2;
+    }
+
+    #totalCells {
+      margin-top: 0;
+    }
+
+
+    /* v33: move language selector out of quadrat area and add title */
+    .sim-card {
+      display: grid;
+      gap: 10px;
+    }
+
+    .sim-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 34px;
+      padding: 0 4px;
+    }
+
+    .sim-topbar h1 {
+      margin: 0;
+      color: var(--text);
+      font-size: clamp(1rem, 1.5vw, 1.22rem);
+      font-weight: 900;
+      letter-spacing: 0.02em;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+
+    .sim-topbar h1::before {
+      content: "";
+      display: inline-block;
+      width: 3px;
+      height: 1.05em;
+      margin-right: 8px;
+      vertical-align: -2px;
+      border-radius: 999px;
+      background: var(--sage);
+    }
+
+    .sim-card .language-switcher {
+      position: static;
+      flex: 0 0 auto;
+      z-index: 1;
+      background: rgba(235, 239, 239, 0.92);
+      border-color: var(--line);
+      backdrop-filter: none;
+    }
+
+    @media (orientation: portrait), (max-width: 900px) {
+      .sim-topbar {
+        min-height: 32px;
+        gap: 8px;
+      }
+
+      .sim-topbar h1 {
+        font-size: clamp(0.9rem, 3.6vw, 1.08rem);
+      }
+
+      .sim-card .language-switcher {
+        transform: scale(0.92);
+        transform-origin: right center;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .sim-topbar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .sim-topbar h1 {
+        white-space: normal;
+      }
+
+      .sim-card .language-switcher {
+        align-self: flex-end;
+      }
+    }
+
+
+    /* v34: center Japanese speed button text */
+    html[lang="ja"] .speed-btn,
+    html[lang="ja"] .level-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    html[lang="ja"] .speed-btn[data-speed="0.5"],
+    html[lang="ja"] .speed-btn[data-speed="100"] {
+      text-align: center;
+      justify-content: center;
+    }
+
+
+    /* v35: keep Japanese reveal button text on one line */
+    html[lang="ja"] #revealBtn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      white-space: nowrap;
+      word-break: keep-all;
+      overflow-wrap: normal;
+      font-size: clamp(0.72rem, 2.45vw, 0.9rem);
+      letter-spacing: -0.05em;
+      line-height: 1.05;
+      padding-left: 0.22rem;
+      padding-right: 0.22rem;
+    }
+
+    html[lang="ja"] .estimate-row {
+      grid-template-columns: minmax(0, 1fr) 88px;
+    }
+
+    @media (max-width: 420px) {
+      html[lang="ja"] .estimate-row {
+        grid-template-columns: minmax(0, 1fr) 84px;
+      }
+
+      html[lang="ja"] #revealBtn {
+        font-size: clamp(0.68rem, 3vw, 0.82rem);
+        letter-spacing: -0.075em;
+      }
+    }
+
+
+    /* v36: online worksheet, manual input, Google Sheet ready */
+    body { overflow: auto !important; }
+    #app { height: auto !important; min-height: 100dvh !important; overflow: visible !important; }
+    .worksheet-section { max-width: 1520px; margin: 12px auto 20px; padding: 14px; }
+    .worksheet-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+    .worksheet-title { margin: 0; font-size: clamp(1.15rem, 2vw, 1.45rem); font-weight: 900; color: var(--text); letter-spacing: 0.02em; line-height: 1.25; }
+    .worksheet-title::before { content: ""; display: inline-block; width: 4px; height: 1.05em; margin-right: 9px; vertical-align: -2px; border-radius: 999px; background: var(--sage); }
+    .worksheet-note { margin: 6px 0 0; color: var(--soft); font-size: 0.88rem; line-height: 1.55; }
+    .worksheet-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; min-width: 300px; }
+    .ws-btn { border: 1px solid var(--line); border-radius: 14px; padding: 0.55rem 0.75rem; background: rgba(255,255,255,0.92); color: var(--text); font-weight: 850; cursor: pointer; }
+    .ws-btn.primary { background: var(--charcoal); border-color: var(--charcoal); color: #fff; }
+    .ws-btn.danger { background: #f7efef; color: #725757; border-color: rgba(114, 87, 87, 0.18); }
+    .ws-status { width: 100%; min-height: 1.2em; color: var(--soft); font-size: 0.8rem; text-align: right; }
+    .ws-block { border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,0.78); padding: 12px; margin-top: 10px; }
+    .ws-block h3 { margin: 0 0 8px; font-size: 1rem; font-weight: 900; color: var(--text); line-height: 1.3; }
+    .ws-block h3::before { content: ""; display: inline-block; width: 3px; height: 1.05em; margin-right: 8px; vertical-align: -2px; border-radius: 999px; background: var(--sage); }
+    .ws-basic-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .ws-field { display: grid; gap: 4px; color: var(--soft); font-size: 0.82rem; font-weight: 800; line-height: 1.35; }
+    .ws-input, .ws-select, .ws-textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: 12px; background: rgba(255,255,255,0.96); color: var(--text); padding: 0.55rem 0.65rem; outline: none; font-weight: 750; }
+    .ws-input:focus, .ws-select:focus, .ws-textarea:focus { border-color: #89aebd; box-shadow: 0 0 0 3px rgba(137,174,189,0.12); }
+    .ws-textarea { min-height: 64px; resize: vertical; line-height: 1.55; }
+    .ws-scroll-table { width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+    .ws-table { width: 100%; min-width: 980px; border-collapse: collapse; font-size: 0.83rem; text-align: center; }
+    .ws-table th, .ws-table td { border-bottom: 1px solid rgba(66,90,102,0.12); border-right: 1px solid rgba(66,90,102,0.10); padding: 6px; vertical-align: middle; }
+    .ws-table th:last-child, .ws-table td:last-child { border-right: 0; }
+    .ws-table tr:last-child td { border-bottom: 0; }
+    .ws-table th { background: #f5f8f8; color: var(--text); font-weight: 900; white-space: nowrap; }
+    .ws-table .ws-input, .ws-table .ws-select { min-height: 34px; padding: 0.35rem 0.4rem; border-radius: 10px; text-align: center; font-size: 0.82rem; }
+    .ws-table .reason-input { text-align: left; }
+    .ws-question-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .ws-question { border: 1px solid rgba(66,90,102,0.10); border-radius: 14px; background: rgba(255,255,255,0.66); padding: 10px; }
+    .ws-question.full { grid-column: 1 / -1; }
+    .ws-question p { margin: 0 0 7px; font-size: 0.92rem; font-weight: 900; line-height: 1.45; color: var(--text); }
+    .ws-options { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 7px; color: var(--soft); font-size: 0.88rem; font-weight: 750; }
+    .ws-options label { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+    .ws-inline-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .ws-conclusion-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px; }
+    .ws-footer-note { margin: 8px 0 0; color: var(--soft); font-size: 0.78rem; line-height: 1.5; }
+    @media (orientation: portrait), (max-width: 900px) {
+      .worksheet-section { margin-top: 12px; padding: 12px; }
+      .worksheet-header { display: grid; }
+      .worksheet-actions { justify-content: stretch; min-width: 0; }
+      .ws-btn { flex: 1 1 auto; }
+      .ws-status { text-align: left; }
+      .ws-basic-grid, .ws-question-grid, .ws-inline-grid, .ws-conclusion-grid { grid-template-columns: 1fr; }
+    }
+
+
+    /* v37: collapsed worksheet + fixed record cells + split error percent */
+    .worksheet-section.collapsed .worksheet-body {
+      display: none;
+    }
+
+    .worksheet-toggle-main {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      width: 100%;
+      border: 0;
+      background: transparent;
+      padding: 0;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .worksheet-toggle-main .worksheet-title {
+      display: flex;
+      align-items: center;
+    }
+
+    .worksheet-toggle-icon {
+      flex: 0 0 auto;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.92);
+      color: var(--text);
+      padding: 0.45rem 0.75rem;
+      font-weight: 850;
+      font-size: 0.9rem;
+    }
+
+    .worksheet-section:not(.collapsed) .worksheet-toggle-icon::before {
+      content: "收合";
+    }
+
+    .worksheet-section.collapsed .worksheet-toggle-icon::before {
+      content: "展開填寫";
+    }
+
+    .worksheet-body {
+      margin-top: 12px;
+    }
+
+    .worksheet-body .worksheet-actions {
+      margin-bottom: 10px;
+    }
+
+    .ws-fixed {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      border-radius: 10px;
+      background: rgba(245,248,248,0.82);
+      color: var(--text);
+      font-weight: 850;
+      line-height: 1.2;
+      padding: 0.35rem 0.4rem;
+      white-space: nowrap;
+    }
+
+    .ws-error-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .ws-error-grid .ws-input {
+      min-width: 0;
+    }
+
+    .ws-error-unit {
+      color: var(--soft);
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    @media (orientation: portrait), (max-width: 900px) {
+      .worksheet-toggle-main {
+        align-items: flex-start;
+      }
+
+      .worksheet-toggle-icon {
+        font-size: 0.82rem;
+        padding: 0.42rem 0.68rem;
+      }
+    }
+
+
+    /* v4: hidden submit URL settings gear */
+    .submit-config-gear {
+      position: fixed;
+      right: 14px;
+      bottom: 14px;
+      z-index: 80;
+      width: 42px;
+      height: 42px;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.92);
+      color: var(--charcoal);
+      box-shadow: 0 6px 20px rgba(33, 43, 54, 0.12);
+      font-size: 1.1rem;
+      font-weight: 900;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .submit-config-panel {
+      position: fixed;
+      inset: auto 14px 66px auto;
+      z-index: 81;
+      width: min(460px, calc(100vw - 28px));
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: rgba(255,255,255,0.98);
+      box-shadow: 0 14px 42px rgba(33, 43, 54, 0.16);
+      padding: 14px;
+    }
+
+    .submit-config-panel.hidden {
+      display: none;
+    }
+
+    .submit-config-panel h3 {
+      margin: 0 0 8px;
+      color: var(--text);
+      font-size: 1rem;
+      font-weight: 900;
+    }
+
+    .submit-config-panel p {
+      margin: 6px 0;
+      color: var(--soft);
+      font-size: 0.82rem;
+      line-height: 1.55;
+    }
+
+    .submit-config-panel input {
+      width: 100%;
+      border: 1px solid var(--line-strong);
+      border-radius: 14px;
+      background: #fff;
+      color: var(--text);
+      padding: 0.62rem 0.7rem;
+      font-size: 0.86rem;
+      font-weight: 750;
+      outline: none;
+    }
+
+    .submit-config-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .submit-config-actions button {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.94);
+      color: var(--text);
+      padding: 0.5rem 0.7rem;
+      font-size: 0.84rem;
+      font-weight: 850;
+    }
+
+    .submit-config-actions button.primary {
+      background: var(--charcoal);
+      border-color: var(--charcoal);
+      color: #fff;
+    }
+
+    .submit-config-actions button.danger {
+      background: var(--rose-bg);
+      border-color: rgba(114,87,87,0.15);
+      color: var(--rose-text);
+    }
+
+    #submitConfigStatus {
+      margin-top: 8px;
+      color: var(--soft);
+      font-size: 0.78rem;
+      line-height: 1.5;
+    }
+
+
+    /* v5: submit URL gear appears only beside the collapse button */
+    .worksheet-toggle-controls {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .worksheet-section.collapsed .submit-config-gear {
+      display: none !important;
+    }
+
+    .worksheet-section:not(.collapsed) .submit-config-gear {
+      position: static !important;
+      width: auto !important;
+      min-width: 38px;
+      height: 38px;
+      padding: 0 0.68rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.92);
+      color: var(--charcoal);
+      box-shadow: none;
+      font-size: 1rem;
+      font-weight: 900;
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .submit-config-panel {
+      position: fixed;
+      inset: auto 14px 66px auto;
+    }
+
+    @media (orientation: portrait), (max-width: 900px) {
+      .worksheet-toggle-controls {
+        gap: 6px;
+      }
+
+      .worksheet-section:not(.collapsed) .submit-config-gear {
+        min-width: 34px;
+        height: 34px;
+        padding: 0 0.58rem;
+        font-size: 0.95rem;
+      }
+    }
+
+  </style>
+</head>
+
+<body>
+  <main id="app">
+    <span id="modeLabel" class="hidden" data-i18n="freeObservation">自由觀察</span>
+    <span id="truthBadge" class="hidden" data-i18n="notRevealedBadge">未揭曉</span>
+
+    <section class="layout-grid">
+      <div class="left-column">
+        <section class="card sim-card">
+          <div class="sim-topbar">
+            <h1 data-i18n="appTitle">族群數量統計方法模擬</h1>
+            <div class="language-switcher" aria-label="語言">
+              <button type="button" data-lang="zh">繁中</button>
+              <button type="button" data-lang="en">English</button>
+              <button type="button" data-lang="ja">日本語</button>
+            </div>
+          </div>
+
+          <div id="canvas-container">
+            <canvas id="simCanvas"></canvas>
+            <div id="gridOverlay" class="grid-overlay hidden"></div>
+            <div id="netPreview" class="hidden"></div>
+          </div>
+
+          <div class="method-grid">
+            <button data-mode="counting" onclick="setMode('counting')" class="mode-btn mode-counting">
+              <span data-i18n="countingMethod">直接記數法</span>
+              <small data-i18n="countingDesc">直接觀察並估算</small>
+            </button>
+            <button data-mode="capture" onclick="setMode('capture')" class="mode-btn mode-capture">
+              <span data-i18n="captureMethod">捉放法</span>
+              <small data-i18n="captureDesc">連點兩下使用方形撈網</small>
+            </button>
+            <button data-mode="quadrat" onclick="setMode('quadrat')" class="mode-btn mode-quadrat">
+              <span data-i18n="quadratMethod">樣區法</span>
+              <small data-i18n="quadratDesc">點選樣區後自動顯示</small>
+            </button>
+          </div>
+        </section>
+
+        <section class="card setting-card">
+          <div class="setting-row">
+            <h2 data-i18n="populationSetting">生物數量設定</h2>
+            <div class="button-group three">
+              <button data-level="low" onclick="setPopulationLevel('low')" class="level-btn" data-i18n="low">少</button>
+              <button data-level="medium" onclick="setPopulationLevel('medium')" class="level-btn active" data-i18n="medium">多</button>
+              <button data-level="high" onclick="setPopulationLevel('high')" class="level-btn" data-i18n="high">超多</button>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <h2 data-i18n="speedSetting">生物速度設定</h2>
+            <div class="button-group four">
+              <button data-speed="0" onclick="setSpeedLevel(0)" class="speed-btn" data-i18n="weed">雜草</button>
+              <button data-speed="0.5" onclick="setSpeedLevel(0.5)" class="speed-btn" data-i18n="snail">蝸牛</button>
+              <button data-speed="10" onclick="setSpeedLevel(10)" class="speed-btn active" data-i18n="ant">螞蟻</button>
+              <button data-speed="100" onclick="setSpeedLevel(100)" class="speed-btn" data-i18n="rocket">火箭</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card calculator-card">
+          <div class="calculator-row">
+            <button class="calc-btn" onclick="calcInput('1')">1</button>
+            <button class="calc-btn" onclick="calcInput('2')">2</button>
+            <button class="calc-btn" onclick="calcInput('3')">3</button>
+            <button class="calc-btn" onclick="calcInput('4')">4</button>
+            <button class="calc-btn" onclick="calcInput('5')">5</button>
+            <button class="calc-btn" onclick="calcInput('6')">6</button>
+            <button class="calc-btn" onclick="calcInput('7')">7</button>
+            <button class="calc-btn" onclick="calcInput('8')">8</button>
+            <button class="calc-btn" onclick="calcInput('9')">9</button>
+            <button class="calc-btn" onclick="calcInput('0')">0</button>
+            <button class="calc-btn calc-op" onclick="calcInput('+')">＋</button>
+            <button class="calc-btn calc-op" onclick="calcInput('-')">－</button>
+            <button class="calc-btn calc-op" onclick="calcInput('*')">×</button>
+            <button class="calc-btn calc-op" onclick="calcInput('/')">÷</button>
+            <button class="calc-btn calc-eq" onclick="calcEvaluate()">＝</button>
+            <input id="calculatorDisplay" class="calculator-display" type="text" value="0" readonly aria-label="計算機顯示" data-i18n-aria="calculatorAria" />
+            <button class="calc-btn" onclick="calcClear()">C</button>
+          </div>
+        </section>
+      </div>
+
+      <aside class="right-column">
+        <section id="capturePanel" class="card side-card hidden">
+          <div class="panel-head">
+            <span id="phaseDisplay" class="pill" data-i18n="notCaptured">尚未捕捉</span>
+          </div>
+
+          <p class="marked-line"><span data-i18n="markedTotalLabel">總共已標記數量：</span><span id="markedTotal">0</span></p>
+
+          <div class="net-box">
+            <p data-i18n="netOrganisms">撈網中的生物</p>
+            <canvas id="netCanvas" width="300" height="54"></canvas>
+
+            <div class="net-stats">
+              <div><span data-i18n="netTotal">撈網內總數</span><strong id="netCount">0</strong></div>
+              <div><span data-i18n="netMarked">撈網內已標記</span><strong id="netMarked">0</strong></div>
+            </div>
+
+            <div class="capture-actions">
+              <button onclick="markCaught()" data-i18n="markRelease">標記／釋放</button>
+              <button onclick="releaseCaught()" data-i18n="directRelease">直接釋放</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="quadratPanel" class="card side-card hidden">
+          <div class="quadrat-settings">
+            <label><span data-i18n="rows">樣區列數</span><input type="number" id="rows" value="3" min="1" max="10" onchange="updateGrid()" /></label>
+            <span>×</span>
+            <label><span data-i18n="cols">樣區欄數</span><input type="number" id="cols" value="5" min="1" max="10" onchange="updateGrid()" /></label>
+            <span>=</span>
+            <div><p data-i18n="totalCellsLabel">總樣區數</p><strong id="totalCells">15</strong></div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th data-i18n="openedQuadrat">已開樣區</th><th data-i18n="quadratCount">樣區內數量</th></tr></thead>
+              <tbody id="quadratRows">
+                <tr class="empty-row"><td colspan="2" data-i18n="clickLeftQuadrat">請點選左側樣區</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="average-row">
+            <span data-i18n="sampleAverage">平均樣區個數</span>
+            <input id="sampleAverageInput" type="number" min="0" step="0.01" placeholder="自行計算" data-i18n-placeholder="manualCalc" />
+          </div>
+        </section>
+
+        <section class="card side-card result-card">
+          <p id="estResult" data-i18n="chooseMethod">請先選擇調查方法</p>
+          <p id="estNote"></p>
+
+          <div class="estimate-row">
+            <input id="studentEstimate" type="number" min="0" placeholder="我的估算值" data-i18n-placeholder="studentEstimate" />
+            <button id="revealBtn" data-i18n="reveal">揭曉</button>
+          </div>
+
+          <div id="truthDisplay" class="result-box" data-i18n="notRevealedDisplay">尚未揭曉</div>
+        </section>
+      </aside>
+    </section>
+
+    <section id="worksheet" class="card worksheet-section collapsed">
+      <div class="worksheet-header">
+        <button type="button" class="worksheet-toggle-main" onclick="toggleWorksheet()">
+          <div>
+            <h2 class="worksheet-title">線上學習單：族群數量統計方法模擬</h2>
+            <p class="worksheet-note">點擊展開後填寫。請先操作上方模擬，再依照畫面結果手動填寫。</p>
+          </div>
+          <span class="worksheet-toggle-controls">
+              <span class="worksheet-toggle-icon" aria-hidden="true"></span>
+              <span role="button" tabindex="0" class="submit-config-gear" onclick="event.stopPropagation(); toggleSubmitConfigPanel();" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); event.stopPropagation(); toggleSubmitConfigPanel();}" aria-label="送出網址設定">⚙</span>
+            </span>
+        </button>
+      </div>
+
+      <div class="worksheet-body">
+        <div class="worksheet-actions">
+          <button type="button" class="ws-btn" onclick="saveWorksheetDraft(true)">暫存本機</button>
+          <button type="button" class="ws-btn" onclick="copyWorksheetJson()">複製備份</button>
+          <button type="button" class="ws-btn danger" onclick="clearWorksheetDraft()">清除暫存</button>
+          <button type="button" class="ws-btn primary" onclick="submitWorksheet()">送出學習單</button>
+          <div id="wsStatus" class="ws-status"></div>
+        </div>
+
+      <div class="ws-block">
+        <h3>一、基本資料</h3>
+        <div class="ws-basic-grid">
+          <label class="ws-field">班級<input id="wsClassName" class="ws-input" name="className" placeholder="例如：701" /></label>
+          <label class="ws-field">座號<input id="wsSeatNo" class="ws-input" name="seatNo" inputmode="numeric" placeholder="例如：12" /></label>
+          <label class="ws-field">姓名<input id="wsStudentName" class="ws-input" name="studentName" placeholder="請輸入姓名" /></label>
+          <label class="ws-field">日期<input id="wsDate" class="ws-input" name="date" type="date" /></label>
+        </div>
+      </div>
+
+      <div class="ws-block">
+        <h3>二、網頁操作紀錄：比較樣本數與誤差</h3>
+        <p class="worksheet-note">方法與標記次數／樣區數依題目固定；可選擇的生物設定與速度設定請使用下拉選單。請依照實際操作結果手動填寫正確估計、真實數量、誤差與百分比。</p>
+        <div class="ws-scroll-table">
+          <table class="ws-table">
+            <thead>
+              <tr>
+                <th>次</th>
+                <th>方法</th>
+                <th>生物設定</th>
+                <th>速度設定</th>
+                <th>標記次數／樣區數</th>
+                <th>正確估計</th>
+                <th>真實數量</th>
+                <th>誤差</th>
+                <th>百分比</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>1</td>
+                <td><span class="ws-fixed" data-fixed-name="record1_method">直接記數法</span></td>
+                <td><select name="record1_population" class="ws-select"><option>少</option><option>多</option><option>超多</option></select></td>
+                <td><select name="record1_speed" class="ws-select"><option>雜草</option><option>蝸牛</option><option>螞蟻</option><option>火箭</option></select></td>
+                <td><span class="ws-fixed" data-fixed-name="record1_sample">1</span></td>
+                <td><input name="record1_correct" class="ws-input" inputmode="numeric" /></td>
+                <td><input name="record1_truth" class="ws-input" inputmode="numeric" /></td>
+                <td><div class="ws-error-grid"><input name="record1_errorCount" class="ws-input" inputmode="numeric" /><span class="ws-error-unit">隻</span></div></td>
+                <td><div class="ws-error-grid"><input name="record1_errorPercent" class="ws-input" inputmode="decimal" /><span class="ws-error-unit">%</span></div></td>
+              </tr>
+              <tr>
+                <td>2</td>
+                <td><span class="ws-fixed" data-fixed-name="record2_method">捉放法</span></td>
+                <td><span class="ws-fixed" data-fixed-name="record2_population">超多</span></td>
+                <td><select name="record2_speed" class="ws-select"><option>雜草</option><option>蝸牛</option><option>螞蟻</option><option>火箭</option></select></td>
+                <td><span class="ws-fixed" data-fixed-name="record2_sample">3</span></td>
+                <td><input name="record2_correct" class="ws-input" inputmode="numeric" /></td>
+                <td><input name="record2_truth" class="ws-input" inputmode="numeric" /></td>
+                <td><div class="ws-error-grid"><input name="record2_errorCount" class="ws-input" inputmode="numeric" /><span class="ws-error-unit">隻</span></div></td>
+                <td><div class="ws-error-grid"><input name="record2_errorPercent" class="ws-input" inputmode="decimal" /><span class="ws-error-unit">%</span></div></td>
+              </tr>
+              <tr>
+                <td>3</td>
+                <td><span class="ws-fixed" data-fixed-name="record3_method">樣區法</span></td>
+                <td><span class="ws-fixed" data-fixed-name="record3_population">超多</span></td>
+                <td><select name="record3_speed" class="ws-select"><option>雜草</option><option>蝸牛</option><option>螞蟻</option><option>火箭</option></select></td>
+                <td><span class="ws-fixed" data-fixed-name="record3_sample">3</span></td>
+                <td><input name="record3_correct" class="ws-input" inputmode="numeric" /></td>
+                <td><input name="record3_truth" class="ws-input" inputmode="numeric" /></td>
+                <td><div class="ws-error-grid"><input name="record3_errorCount" class="ws-input" inputmode="numeric" /><span class="ws-error-unit">隻</span></div></td>
+                <td><div class="ws-error-grid"><input name="record3_errorPercent" class="ws-input" inputmode="decimal" /><span class="ws-error-unit">%</span></div></td>
+              </tr>
+              <tr>
+                <td>4</td>
+                <td><select name="record4_method" class="ws-select"><option>捉放法</option><option>樣區法</option></select></td>
+                <td><select name="record4_population" class="ws-select"><option>少</option><option>多</option><option>超多</option></select></td>
+                <td><select name="record4_speed" class="ws-select"><option>雜草</option><option>蝸牛</option><option>螞蟻</option><option>火箭</option></select></td>
+                <td><span class="ws-fixed" data-fixed-name="record4_sample">5</span></td>
+                <td><input name="record4_correct" class="ws-input" inputmode="numeric" /></td>
+                <td><input name="record4_truth" class="ws-input" inputmode="numeric" /></td>
+                <td><div class="ws-error-grid"><input name="record4_errorCount" class="ws-input" inputmode="numeric" /><span class="ws-error-unit">隻</span></div></td>
+                <td><div class="ws-error-grid"><input name="record4_errorPercent" class="ws-input" inputmode="decimal" /><span class="ws-error-unit">%</span></div></td>
+              </tr>
+              <tr>
+                <td>5</td>
+                <td><select name="record5_method" class="ws-select"><option>捉放法</option><option>樣區法</option></select></td>
+                <td><select name="record5_population" class="ws-select"><option>少</option><option>多</option><option>超多</option></select></td>
+                <td><select name="record5_speed" class="ws-select"><option>雜草</option><option>蝸牛</option><option>螞蟻</option><option>火箭</option></select></td>
+                <td><span class="ws-fixed" data-fixed-name="record5_sample">10</span></td>
+                <td><input name="record5_correct" class="ws-input" inputmode="numeric" /></td>
+                <td><input name="record5_truth" class="ws-input" inputmode="numeric" /></td>
+                <td><div class="ws-error-grid"><input name="record5_errorCount" class="ws-input" inputmode="numeric" /><span class="ws-error-unit">隻</span></div></td>
+                <td><div class="ws-error-grid"><input name="record5_errorPercent" class="ws-input" inputmode="decimal" /><span class="ws-error-unit">%</span></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="ws-block">
+        <h3>三、觀察與判斷</h3>
+        <div class="ws-question-grid">
+          <div class="ws-question">
+            <p>1. 採樣次數增加後，誤差一定會變小嗎？</p>
+            <div class="ws-options">
+              <label><input type="radio" name="q1_sample_error" value="一定" />一定</label>
+              <label><input type="radio" name="q1_sample_error" value="不一定" />不一定</label>
+              <label><input type="radio" name="q1_sample_error" value="沒有變化" />沒有變化</label>
+            </div>
+            <input name="q1_reason" class="ws-input" placeholder="原因" />
+          </div>
+          <div class="ws-question">
+            <p>2. 哪一種生物適合直接記數法？</p>
+            <div class="ws-inline-grid"><input name="q2_direct_feature" class="ws-input" placeholder="特徵" /><input name="q2_direct_example" class="ws-input" placeholder="例子" /></div>
+          </div>
+          <div class="ws-question">
+            <p>3. 捉放法在什麼狀況下可能不準？至少回答兩項。</p>
+            <div class="ws-inline-grid"><input name="q3_capture_problem1" class="ws-input" placeholder="狀況一" /><input name="q3_capture_problem2" class="ws-input" placeholder="狀況二" /></div>
+          </div>
+          <div class="ws-question">
+            <p>4. 哪一種生物適合樣區法？</p>
+            <div class="ws-inline-grid"><input name="q4_quadrat_feature" class="ws-input" placeholder="特徵" /><input name="q4_quadrat_example" class="ws-input" placeholder="例子" /></div>
+          </div>
+          <div class="ws-question full">
+            <p>5. 如果生物分布不平均，哪個方法較容易受到取樣位置影響？</p>
+            <div class="ws-options">
+              <label><input type="radio" name="q5_uneven_method" value="直接記數法" />直接記數</label>
+              <label><input type="radio" name="q5_uneven_method" value="捉放法" />捉放法</label>
+              <label><input type="radio" name="q5_uneven_method" value="樣區法" />樣區法</label>
+            </div>
+            <input name="q5_reason" class="ws-input" placeholder="理由" />
+          </div>
+        </div>
+      </div>
+
+      <div class="ws-block">
+        <h3>四、真實生活題型：選擇合適的統計法</h3>
+        <div class="ws-scroll-table">
+          <table class="ws-table">
+            <thead>
+              <tr>
+                <th>真實情境</th>
+                <th>合適方法</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>校園草地上的蒲公英</td>
+                <td><select name="life_dandelion_method" class="ws-select"><option></option><option>直接記數法</option><option>捉放法</option><option>樣區法</option></select></td>
+              </tr>
+              <tr>
+                <td>池塘中的魚</td>
+                <td><select name="life_fish_method" class="ws-select"><option></option><option>直接記數法</option><option>捉放法</option><option>樣區法</option></select></td>
+              </tr>
+              <tr>
+                <td>操場旁一排樹木</td>
+                <td><select name="life_tree_method" class="ws-select"><option></option><option>直接記數法</option><option>捉放法</option><option>樣區法</option></select></td>
+              </tr>
+              <tr>
+                <td>森林中的甲蟲</td>
+                <td><select name="life_beetle_method" class="ws-select"><option></option><option>直接記數法</option><option>捉放法</option><option>樣區法</option></select></td>
+              </tr>
+              <tr>
+                <td>水田中的福壽螺</td>
+                <td><select name="life_apple_snail_method" class="ws-select"><option></option><option>直接記數法</option><option>捉放法</option><option>樣區法</option></select></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="ws-block">
+        <h3>五、說明</h3>
+        <p class="worksheet-note">我認為選擇統計方法時，應該先觀察生物的：</p>
+        <div class="ws-conclusion-grid">
+          <input name="conclusion_feature1" class="ws-input" placeholder="特性一" />
+          <input name="conclusion_feature2" class="ws-input" placeholder="特性二" />
+          <input name="conclusion_feature3" class="ws-input" placeholder="特性三" />
+        </div>
+        <input name="conclusion_reason" class="ws-input" placeholder="因為..." />
+      </div>
+
+      <div class="ws-block">
+        <h3>六、心得總結：這次活動最大的發現是</h3>
+        <textarea name="reflection" class="ws-textarea" placeholder="請寫下你的發現或疑問"></textarea>
+        <p class="ws-footer-note">送出前請確認姓名、座號與答案。若網路不穩，可先按「複製備份」，把內容貼到記事本或交給老師。</p>
+      </div>
+      </div>
+    </section>
+    <section id="submitConfigPanel" class="submit-config-panel hidden" aria-label="送出網址設定">
+      <h3>送出網址設定</h3>
+      <p>請貼上 Google Apps Script Web App URL。這個設定會儲存在本機瀏覽器，也可以產生已設定網址分享給學生。</p>
+      <input id="submitUrlInput" type="url" placeholder="https://script.google.com/macros/s/......../exec" />
+      <div class="submit-config-actions">
+        <button type="button" class="primary" onclick="saveSubmitUrlSetting()">儲存</button>
+        <button type="button" onclick="copyConfiguredSubmitLink()">複製已設定網址</button>
+        <button type="button" class="danger" onclick="clearSubmitUrlSetting()">清除</button>
+        <button type="button" onclick="toggleSubmitConfigPanel(false)">關閉</button>
+      </div>
+      <div id="submitConfigStatus"></div>
+    </section>
+
+  </main>
+
+  <script>
+    const I18N = {
+      zh: {
+        htmlLang: "zh-Hant",
+        title: "族群數量統計互動系統",
+        appTitle: "族群數量統計方法模擬",
+        languageLabel: "語言",
+        freeObservation: "自由觀察",
+        notRevealedBadge: "未揭曉",
+        countingMethod: "直接記數法",
+        countingDesc: "直接觀察並估算",
+        captureMethod: "捉放法",
+        captureDesc: "連點兩下使用方形撈網",
+        quadratMethod: "樣區法",
+        quadratDesc: "點選樣區後自動顯示",
+        populationSetting: "生物數量設定",
+        low: "少",
+        medium: "多",
+        high: "超多",
+        speedSetting: "生物速度設定",
+        weed: "雜草",
+        snail: "蝸牛",
+        ant: "螞蟻",
+        rocket: "火箭",
+        calculatorAria: "計算機顯示",
+        notCaptured: "尚未捕捉",
+        markingPhase: "標記階段",
+        secondCapture: "第二次捕捉",
+        markedTotalLabel: "總共已標記數量：",
+        netOrganisms: "撈網中的生物",
+        netTotal: "撈網內總數",
+        netMarked: "撈網內已標記",
+        markRelease: "標記／釋放",
+        directRelease: "直接釋放",
+        rows: "樣區列數",
+        cols: "樣區欄數",
+        totalCellsLabel: "總樣區數",
+        openedQuadrat: "已開樣區",
+        quadratCount: "樣區內數量",
+        clickLeftQuadrat: "請點選左側樣區",
+        sampleAverage: "平均樣區個數",
+        manualCalc: "自行計算",
+        chooseMethod: "請先選擇調查方法",
+        studentEstimate: "我的估算值",
+        reveal: "揭曉",
+        notRevealedDisplay: "尚未揭曉",
+        directModeStatus: "直接記數法：請直接觀察並估算生物數量",
+        captureReadyStatus: "捉放法：先捕捉並標記，再進行第二次捕捉",
+        captureFormulaStatus: "捉放法：總標記數 × 捕捉數 ÷ 撈網內已標記",
+        quadratReadyStatus: "樣區法：點選樣區，自行計算平均與估計值",
+        quadratFormulaStatus: "樣區法：N ≈ 平均樣區個數 × 總樣區數",
+        totalCellsNote: ({ totalCells }) => `總樣區數 ${totalCells}。請根據各樣區內數量自行計算平均與估計值。`,
+        directCorrectNote: "直接記數法：正確計數值即為真實數量。",
+        captureCorrectNote: ({ markedTotal, captureTotal, recapturedMarked }) => `捉放法正確計算：${markedTotal} × ${captureTotal} ÷ ${recapturedMarked}`,
+        captureNeedDataNote: "捉放法資料不足，需有總標記數、捕捉數，且撈網內已標記數不可為 0。",
+        captureNeedMarkedNote: "捉放法資料不足：撈網內已標記數不可為 0。",
+        quadratCorrectNote: ({ mean, totalCells }) => `樣區法正確計算：平均 ${mean} × 總樣區數 ${totalCells}`,
+        quadratNeedDataNote: "樣區法資料不足，請至少開啟一個樣區。",
+        noMethodNote: "請先選擇調查方法。",
+        yourEstimate: "你的估計值",
+        correctEstimate: "正確估計值",
+        actualNumber: "真實數量",
+        methodError: "方法誤差",
+        noInput: "未輸入",
+        insufficientData: "資料不足",
+        error: "錯誤",
+        organismUnit: "隻"
+      },
+      en: {
+        htmlLang: "en",
+        title: "Interactive System for Estimating Population Size",
+        appTitle: "Population Estimation Method Simulation",
+        languageLabel: "Language",
+        freeObservation: "Free Observation",
+        notRevealedBadge: "Not shown yet",
+        countingMethod: "Direct Counting Method",
+        countingDesc: "Look carefully and estimate",
+        captureMethod: "Mark-Recapture Method",
+        captureDesc: "Double-click to use the square net",
+        quadratMethod: "Quadrat Method",
+        quadratDesc: "Click a plot to show the count",
+        populationSetting: "Number of organisms",
+        low: "Few",
+        medium: "Many",
+        high: "A lot",
+        speedSetting: "Movement speed",
+        weed: "Weed",
+        snail: "Snail",
+        ant: "Ant",
+        rocket: "Rocket",
+        calculatorAria: "Calculator display",
+        notCaptured: "Not caught yet",
+        markingPhase: "Marking step",
+        secondCapture: "Second catch",
+        markedTotalLabel: "Marked so far: ",
+        netOrganisms: "Organisms in the net",
+        netTotal: "Total in net",
+        netMarked: "Marked in net",
+        markRelease: "Mark / Release",
+        directRelease: "Release",
+        rows: "Rows",
+        cols: "Columns",
+        totalCellsLabel: "Total plots",
+        openedQuadrat: "Checked plots",
+        quadratCount: "Count in plot",
+        clickLeftQuadrat: "Click a plot on the left",
+        sampleAverage: "Average per plot",
+        manualCalc: "Calculate",
+        chooseMethod: "Choose a method first",
+        studentEstimate: "My estimate",
+        reveal: "Show",
+        notRevealedDisplay: "Answer not shown yet",
+        directModeStatus: "Direct counting: look carefully and estimate the number.",
+        captureReadyStatus: "Mark-recapture: catch, mark, release, then catch again.",
+        captureFormulaStatus: "Mark-recapture: marked total × caught total ÷ marked in net",
+        quadratReadyStatus: "Quadrat method: click plots and calculate the average yourself.",
+        quadratFormulaStatus: "Quadrat method: N ≈ average per plot × total plots",
+        totalCellsNote: ({ totalCells }) => `Total plots: ${totalCells}. Use the plot counts to calculate the average and estimate.`,
+        directCorrectNote: "Direct counting: the correct count is the actual number.",
+        captureCorrectNote: ({ markedTotal, captureTotal, recapturedMarked }) => `Correct mark-recapture calculation: ${markedTotal} × ${captureTotal} ÷ ${recapturedMarked}`,
+        captureNeedDataNote: "Not enough data. You need marked total, caught total, and marked in net cannot be 0.",
+        captureNeedMarkedNote: "Not enough data: marked in net cannot be 0.",
+        quadratCorrectNote: ({ mean, totalCells }) => `Correct quadrat calculation: average ${mean} × total plots ${totalCells}`,
+        quadratNeedDataNote: "Not enough data. Open at least one plot.",
+        noMethodNote: "Choose a method first.",
+        yourEstimate: "Your estimate",
+        correctEstimate: "Correct estimate",
+        actualNumber: "Actual number",
+        methodError: "Method error",
+        noInput: "No answer",
+        insufficientData: "Not enough data",
+        error: "Error",
+        organismUnit: "organisms"
+      },
+      ja: {
+        htmlLang: "ja",
+        title: "個体群サイズ推定インタラクティブシステム",
+        appTitle: "個体群推定方法シミュレーション",
+        languageLabel: "言語",
+        freeObservation: "自由観察",
+        notRevealedBadge: "未表示",
+        countingMethod: "直接計数法",
+        countingDesc: "観察して数を予想する",
+        captureMethod: "標識再捕法",
+        captureDesc: "2回クリックして四角い網を使う",
+        quadratMethod: "方形区法",
+        quadratDesc: "区画を選ぶと数が出る",
+        populationSetting: "生物の数",
+        low: "少ない",
+        medium: "多い",
+        high: "とても多い",
+        speedSetting: "動く速さ",
+        weed: "雑草",
+        snail: "カタツムリ",
+        ant: "アリ",
+        rocket: "ロケット",
+        calculatorAria: "電卓の表示",
+        notCaptured: "まだ捕まえていません",
+        markingPhase: "印を付ける段階",
+        secondCapture: "2回目の捕獲",
+        markedTotalLabel: "印を付けた数：",
+        netOrganisms: "網の中の生物",
+        netTotal: "網の中の合計",
+        netMarked: "網の中の印つき",
+        markRelease: "印を付けて放す",
+        directRelease: "そのまま放す",
+        rows: "たての区画数",
+        cols: "よこの区画数",
+        totalCellsLabel: "区画の合計",
+        openedQuadrat: "調べた区画",
+        quadratCount: "区画内の数",
+        clickLeftQuadrat: "左の区画を選んでください",
+        sampleAverage: "区画1つあたりの平均",
+        manualCalc: "自分で計算",
+        chooseMethod: "先に調べ方を選んでください",
+        studentEstimate: "自分の予想",
+        reveal: "答えを見る",
+        notRevealedDisplay: "まだ答えを見ていません",
+        directModeStatus: "直接計数法：よく観察して生物の数を予想しましょう。",
+        captureReadyStatus: "標識再捕法：捕まえて印を付け、放してからもう一度捕まえます。",
+        captureFormulaStatus: "標識再捕法：印を付けた数 × 捕まえた数 ÷ 網の中の印つき",
+        quadratReadyStatus: "方形区法：区画を選んで、平均と予想値を自分で計算します。",
+        quadratFormulaStatus: "方形区法：N ≈ 区画1つあたりの平均 × 区画の合計",
+        totalCellsNote: ({ totalCells }) => `区画の合計は ${totalCells} です。各区画の数から平均と予想値を計算しましょう。`,
+        directCorrectNote: "直接計数法：正しく数えた値が本当の数です。",
+        captureCorrectNote: ({ markedTotal, captureTotal, recapturedMarked }) => `標識再捕法の正しい計算：${markedTotal} × ${captureTotal} ÷ ${recapturedMarked}`,
+        captureNeedDataNote: "データが足りません。印を付けた数、捕まえた数が必要で、網の中の印つきは0にできません。",
+        captureNeedMarkedNote: "データが足りません：網の中の印つきは0にできません。",
+        quadratCorrectNote: ({ mean, totalCells }) => `方形区法の正しい計算：平均 ${mean} × 区画の合計 ${totalCells}`,
+        quadratNeedDataNote: "データが足りません。少なくとも1つの区画を開いてください。",
+        noMethodNote: "先に調べ方を選んでください。",
+        yourEstimate: "あなたの予想",
+        correctEstimate: "正しい推定値",
+        actualNumber: "本当の数",
+        methodError: "方法によるずれ",
+        noInput: "未入力",
+        insufficientData: "データ不足",
+        error: "エラー",
+        organismUnit: "個体"
+      }
+    };
+
+    let currentLang = localStorage.getItem("bioPopulationLang") || "zh";
+    let calcExpression = "0";
+    let calcJustEvaluated = false;
+
+    const $ = (id) => document.getElementById(id);
+    const t = (key, params) => {
+      const value = I18N[currentLang][key] ?? I18N.zh[key] ?? key;
+      return typeof value === "function" ? value(params || {}) : value;
+    };
+
+    function applyLanguage(lang, { preserveResult = false } = {}) {
+      currentLang = I18N[lang] ? lang : "zh";
+      localStorage.setItem("bioPopulationLang", currentLang);
+      document.documentElement.lang = t("htmlLang");
+      document.title = t("title");
+
+      document.querySelectorAll("[data-i18n]").forEach((el) => {
+        el.textContent = t(el.dataset.i18n);
+      });
+
+      document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+        el.placeholder = t(el.dataset.i18nPlaceholder);
+      });
+
+      document.querySelectorAll("[data-i18n-aria]").forEach((el) => {
+        el.setAttribute("aria-label", t(el.dataset.i18nAria));
+      });
+
+      document.querySelectorAll(".language-switcher button").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.lang === currentLang);
+      });
+
+      if (!preserveResult) {
+        resetEstimateDisplay();
+        $("truthDisplay").textContent = t("notRevealedDisplay");
+      }
+      refreshModeText();
+      updateCaptureStats();
+    }
+
+    function resetEstimateDisplay() {
+      $("estResult").textContent = t("chooseMethod");
+      $("estNote").textContent = "";
+    }
+
+    function refreshModeText() {
+      if (mode === "counting") {
+        $("modeLabel").textContent = t("countingMethod");
+        $("estResult").textContent = t("directModeStatus");
+      } else if (mode === "capture") {
+        $("modeLabel").textContent = t("captureMethod");
+        updateCaptureStats();
+      } else if (mode === "quadrat") {
+        $("modeLabel").textContent = t("quadratMethod");
+        if (getQuadratCounts().length > 0) {
+          $("estResult").textContent = t("quadratFormulaStatus");
+          $("estNote").textContent = t("totalCellsNote", { totalCells: $("totalCells").textContent });
+        } else {
+          $("estResult").textContent = t("quadratReadyStatus");
+          $("estNote").textContent = "";
+        }
+      } else {
+        $("modeLabel").textContent = t("freeObservation");
+      }
+    }
+
+    function updateCalculatorDisplay() {
+      $("calculatorDisplay").value = calcExpression.replaceAll("*", "×").replaceAll("/", "÷");
+    }
+
+    function calcInput(value) {
+      const operators = ["+", "-", "*", "/"];
+
+      if (calcExpression === t("error") || Object.values(I18N).some((dict) => calcExpression === dict.error)) {
+        calcExpression = "0";
+      }
+
+      if (calcJustEvaluated && !operators.includes(value)) {
+        calcExpression = "0";
+      }
+      calcJustEvaluated = false;
+
+      if (operators.includes(value)) {
+        const last = calcExpression.slice(-1);
+        if (operators.includes(last)) {
+          calcExpression = calcExpression.slice(0, -1) + value;
+        } else {
+          calcExpression += value;
+        }
+        updateCalculatorDisplay();
+        return;
+      }
+
+      if (calcExpression === "0") {
+        calcExpression = value;
+      } else {
+        calcExpression += value;
+      }
+      updateCalculatorDisplay();
+    }
+
+    function calcClear() {
+      calcExpression = "0";
+      calcJustEvaluated = false;
+      updateCalculatorDisplay();
+    }
+
+    function calcEvaluate() {
+      try {
+        if (!/^[0-9+\-*/. ()]+$/.test(calcExpression)) return;
+        const result = Function(`"use strict"; return (${calcExpression})`)();
+        calcExpression = Number.isFinite(result)
+          ? String(Math.round(result * 1000000) / 1000000)
+          : t("error");
+      } catch (error) {
+        calcExpression = t("error");
+      }
+      calcJustEvaluated = true;
+      updateCalculatorDisplay();
+    }
+
+    const canvas = $("simCanvas");
+    const ctx = canvas.getContext("2d");
+    const netCanvas = $("netCanvas");
+    const netCtx = netCanvas.getContext("2d");
+    const container = $("canvas-container");
+    const gridOverlay = $("gridOverlay");
+    const netPreview = $("netPreview");
+
+    const NET_SIZE = 82;
+    const POPULATION_LEVEL_RANGES = {
+      low: [10, 50],
+      medium: [100, 500],
+      high: [1000, 1200]
+    };
+
+    let mode = "none";
+    let entities = [];
+    let populationLevel = "medium";
+    let popSize = randomPopulationCount(populationLevel);
+    let speedLevel = 10;
+    let net = [];
+    let markedCount = 0;
+    let caughtTotal = 0;
+    let recapturedCount = 0;
+    let captureNumerator = 0;
+    let captureDenominator = 0;
+    let lastCaptureForEstimate = null;
+    let phase = 0;
+    let lastTap = { time: 0, x: -9999, y: -9999 };
+    let quadratSampleNo = 0;
+    let quadratSamples = [];
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function randomInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    function randomPopulationCount(level) {
+      const range = POPULATION_LEVEL_RANGES[level] || POPULATION_LEVEL_RANGES.medium;
+      return randomInt(range[0], range[1]);
+    }
+
+    function randomVelocityVector() {
+      const angle = Math.random() * Math.PI * 2;
+      const baseSpeed = 0.8 + Math.random() * 0.7;
+      return {
+        dx: Math.cos(angle) * baseSpeed,
+        dy: Math.sin(angle) * baseSpeed
+      };
+    }
+
+    function createEntity(isMarked = false) {
+      const v = randomVelocityVector();
+      return {
+        id: (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now() + Math.random()),
+        x: Math.random() * Math.max(1, canvas.width - 24) + 12,
+        y: Math.random() * Math.max(1, canvas.height - 24) + 12,
+        dx: v.dx,
+        dy: v.dy,
+        radius: 4.6 + Math.random() * 1.6,
+        isMarked
+      };
+    }
+
+    function resizeCanvas() {
+      const oldWidth = canvas.width || container.clientWidth || 800;
+      const oldHeight = canvas.height || container.clientHeight || 300;
+
+      canvas.width = container.clientWidth || 800;
+      canvas.height = container.clientHeight || 300;
+
+      if (entities.length > 0 && oldWidth && oldHeight) {
+        const sx = canvas.width / oldWidth;
+        const sy = canvas.height / oldHeight;
+        entities.forEach((e) => {
+          e.x = clamp(e.x * sx, e.radius, canvas.width - e.radius);
+          e.y = clamp(e.y * sy, e.radius, canvas.height - e.radius);
+        });
+      }
+
+      if (mode === "quadrat") updateGrid(true);
+    }
+
+    function setPopulationLevel(level) {
+      populationLevel = level;
+      resetPopulation(randomPopulationCount(level));
+      updateLevelButtons();
+    }
+
+    function updateLevelButtons() {
+      document.querySelectorAll(".level-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.level === populationLevel);
+      });
+    }
+
+    function setSpeedLevel(value) {
+      speedLevel = Number(value);
+      document.querySelectorAll(".speed-btn").forEach((btn) => {
+        btn.classList.toggle("active", Number(btn.dataset.speed) === speedLevel);
+      });
+    }
+
+    function resetPopulation(count) {
+      popSize = count;
+      net = [];
+      entities = Array.from({ length: popSize }, () => createEntity(false));
+      resetMeasurementState(false);
+    }
+
+    function resetMeasurementState(returnNet = true) {
+      if (returnNet && net.length > 0) {
+        entities = entities.concat(net);
+        net = [];
+      }
+
+      entities.forEach((e) => { e.isMarked = false; });
+
+      markedCount = 0;
+      caughtTotal = 0;
+      recapturedCount = 0;
+      captureNumerator = 0;
+      captureDenominator = 0;
+      lastCaptureForEstimate = null;
+      phase = 0;
+      lastTap = { time: 0, x: -9999, y: -9999 };
+      quadratSampleNo = 0;
+      quadratSamples = [];
+
+      $("truthBadge").textContent = t("notRevealedBadge");
+      $("truthDisplay").textContent = t("notRevealedDisplay");
+      $("studentEstimate").value = "";
+
+      if ($("phaseDisplay")) $("phaseDisplay").textContent = t("notCaptured");
+      if ($("markedTotal")) $("markedTotal").textContent = "0";
+      resetQuadratRows();
+      resetEstimateDisplay();
+      drawNetCanvas();
+      updateCaptureStats();
+
+      if (mode === "quadrat") updateGrid();
+    }
+
+    function setMode(nextMode) {
+      mode = nextMode;
+      resetMeasurementState(true);
+
+      $("capturePanel").classList.toggle("hidden", mode !== "capture");
+      $("quadratPanel").classList.toggle("hidden", mode !== "quadrat");
+      gridOverlay.classList.toggle("hidden", mode !== "quadrat");
+      netPreview.classList.add("hidden");
+
+      document.querySelectorAll(".mode-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.mode === mode);
+      });
+
+      if (mode === "counting") {
+        $("modeLabel").textContent = t("countingMethod");
+        $("estResult").textContent = t("directModeStatus");
+        $("estNote").textContent = "";
+      }
+
+      if (mode === "capture") {
+        $("modeLabel").textContent = t("captureMethod");
+        updateCaptureStats();
+      }
+
+      if (mode === "quadrat") {
+        $("modeLabel").textContent = t("quadratMethod");
+        $("estResult").textContent = t("quadratReadyStatus");
+        $("estNote").textContent = "";
+        updateGrid();
+      }
+    }
+
+    function updateCaptureStats() {
+      const currentNetMarked = net.filter((n) => n.isMarked).length;
+      if ($("netCount")) $("netCount").textContent = net.length;
+      if ($("netMarked")) $("netMarked").textContent = currentNetMarked;
+      if ($("markedTotal")) $("markedTotal").textContent = markedCount;
+      drawNetCanvas();
+
+      if (mode !== "capture") return;
+
+      if (phase === 0) {
+        $("phaseDisplay").textContent = net.length > 0 ? t("markingPhase") : t("notCaptured");
+        $("estResult").textContent = t("captureReadyStatus");
+        $("estNote").textContent = "";
+        return;
+      }
+
+      $("phaseDisplay").textContent = t("secondCapture");
+      $("estResult").textContent = t("captureFormulaStatus");
+      $("estNote").textContent = "";
+    }
+
+    function drawEntities() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const speedFactor = speedLevel / 10;
+
+      entities.forEach((e) => {
+        if (speedLevel > 0) {
+          e.x += e.dx * speedFactor;
+          e.y += e.dy * speedFactor;
+
+          if (e.x < e.radius || e.x > canvas.width - e.radius) {
+            e.dx *= -1;
+            e.x = clamp(e.x, e.radius, canvas.width - e.radius);
+          }
+
+          if (e.y < e.radius || e.y > canvas.height - e.radius) {
+            e.dy *= -1;
+            e.y = clamp(e.y, e.radius, canvas.height - e.radius);
+          }
+        }
+
+        ctx.beginPath();
+        ctx.fillStyle = e.isMarked ? "#fb7185" : "#22d3ee";
+        ctx.shadowColor = e.isMarked ? "rgba(251, 113, 133, 0.55)" : "rgba(34, 211, 238, 0.45)";
+        ctx.shadowBlur = 10;
+        ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.lineWidth = 1.4;
+        ctx.strokeStyle = e.isMarked ? "rgba(255,255,255,0.90)" : "rgba(255,255,255,0.50)";
+        ctx.stroke();
+      });
+
+      requestAnimationFrame(drawEntities);
+    }
+
+    function drawNetCanvas() {
+      if (!netCtx) return;
+
+      netCtx.clearRect(0, 0, netCanvas.width, netCanvas.height);
+      netCtx.fillStyle = "#f8fafc";
+      netCtx.fillRect(0, 0, netCanvas.width, netCanvas.height);
+
+      net.slice(0, 70).forEach((n, i) => {
+        const col = i % 23;
+        const row = Math.floor(i / 23);
+        const x = 10 + col * 12;
+        const y = 12 + row * 17;
+
+        netCtx.beginPath();
+        netCtx.fillStyle = n.isMarked ? "#fb7185" : "#22d3ee";
+        netCtx.arc(x, y, 4.8, 0, Math.PI * 2);
+        netCtx.fill();
+      });
+
+      if (net.length > 70) {
+        netCtx.fillStyle = "#334155";
+        netCtx.font = "bold 13px sans-serif";
+        netCtx.fillText(`+${net.length - 70}`, 260, 50);
+      }
+    }
+
+    function getCanvasPoint(event) {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = event.clientX ?? event.touches?.[0]?.clientX;
+      const clientY = event.clientY ?? event.touches?.[0]?.clientY;
+
+      return {
+        x: clamp(clientX - rect.left, NET_SIZE / 2, canvas.width - NET_SIZE / 2),
+        y: clamp(clientY - rect.top, NET_SIZE / 2, canvas.height - NET_SIZE / 2)
+      };
+    }
+
+    function moveNetPreview(event) {
+      if (mode !== "capture") {
+        netPreview.classList.add("hidden");
+        return;
+      }
+
+      const point = getCanvasPoint(event);
+      netPreview.style.left = `${point.x - NET_SIZE / 2}px`;
+      netPreview.style.top = `${point.y - NET_SIZE / 2}px`;
+      netPreview.classList.remove("hidden");
+    }
+
+    function captureAt(x, y) {
+      if (mode !== "capture") return;
+
+      const left = x - NET_SIZE / 2;
+      const right = x + NET_SIZE / 2;
+      const top = y - NET_SIZE / 2;
+      const bottom = y + NET_SIZE / 2;
+      const caught = [];
+      const remaining = [];
+
+      entities.forEach((entity) => {
+        if (entity.x >= left && entity.x <= right && entity.y >= top && entity.y <= bottom) {
+          caught.push(entity);
+        } else {
+          remaining.push(entity);
+        }
+      });
+
+      entities = remaining;
+      net = net.concat(caught);
+
+      if (phase === 1) {
+        const currentNetMarked = net.filter((n) => n.isMarked).length;
+        lastCaptureForEstimate = {
+          markedTotal: markedCount,
+          captureTotal: net.length,
+          recapturedMarked: currentNetMarked
+        };
+      }
+
+      showCaptureFlash(left, top);
+      updateCaptureStats();
+    }
+
+    function showCaptureFlash(left, top) {
+      const flash = document.createElement("div");
+      flash.className = "capture-flash";
+      flash.style.left = `${left}px`;
+      flash.style.top = `${top}px`;
+      container.appendChild(flash);
+      window.setTimeout(() => flash.remove(), 360);
+    }
+
+    function markCaught() {
+      if (mode !== "capture" || net.length === 0) return;
+
+      const currentNetMarked = net.filter((n) => n.isMarked).length;
+
+      if (phase === 0) {
+        phase = 1;
+      } else {
+        const markedBeforeThisCatch = markedCount;
+        lastCaptureForEstimate = {
+          markedTotal: markedBeforeThisCatch,
+          captureTotal: net.length,
+          recapturedMarked: currentNetMarked
+        };
+        caughtTotal += net.length;
+        recapturedCount += currentNetMarked;
+        captureNumerator += markedBeforeThisCatch * net.length;
+        captureDenominator += currentNetMarked;
+      }
+
+      net.forEach((entity) => {
+        if (!entity.isMarked) {
+          entity.isMarked = true;
+          markedCount++;
+        }
+      });
+
+      releaseCaught(false);
+      updateCaptureStats();
+    }
+
+    function releaseCaught(resetStudent = true) {
+      if (net.length > 0) {
+        entities = entities.concat(net);
+        net = [];
+      }
+      if (resetStudent && mode === "capture" && phase === 0) resetEstimateDisplay();
+      updateCaptureStats();
+    }
+
+    function resetQuadratRows() {
+      if (!$("quadratRows")) return;
+      $("quadratRows").innerHTML = `<tr class="empty-row"><td colspan="2">${t("clickLeftQuadrat")}</td></tr>`;
+    }
+
+    function updateGrid(preserveSamples = false) {
+      if (mode !== "quadrat") return;
+
+      const rows = clamp(parseInt($("rows").value, 10) || 3, 1, 10);
+      const cols = clamp(parseInt($("cols").value, 10) || 5, 1, 10);
+
+      $("rows").value = rows;
+      $("cols").value = cols;
+      $("totalCells").textContent = rows * cols;
+
+      gridOverlay.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      gridOverlay.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+      gridOverlay.innerHTML = "";
+
+      if (!preserveSamples) {
+        quadratSamples = [];
+        quadratSampleNo = 0;
+        resetQuadratRows();
+      } else {
+        quadratSampleNo = quadratSamples.length;
+      }
+
+      const selectedIndexes = new Set(quadratSamples.map((sample) => sample.cellIndex));
+
+      for (let i = 0; i < rows * cols; i++) {
+        const cell = document.createElement("button");
+        cell.type = "button";
+        cell.dataset.index = i;
+
+        if (selectedIndexes.has(i)) {
+          cell.className = "revealed";
+          cell.disabled = true;
+        } else {
+          cell.className = "grid-cell";
+          cell.addEventListener("click", () => {
+            cell.classList.remove("grid-cell");
+            cell.classList.add("revealed");
+            cell.disabled = true;
+            addQuadratRow(i);
+          });
+        }
+
+        gridOverlay.appendChild(cell);
+      }
+    }
+
+    function countEntitiesInQuadratCell(index) {
+      const rows = parseInt($("rows").value, 10);
+      const cols = parseInt($("cols").value, 10);
+      const cellWidth = canvas.width / cols;
+      const cellHeight = canvas.height / rows;
+      const gridX = index % cols;
+      const gridY = Math.floor(index / cols);
+      const x1 = gridX * cellWidth;
+      const x2 = (gridX + 1) * cellWidth;
+      const y1 = gridY * cellHeight;
+      const y2 = (gridY + 1) * cellHeight;
+
+      return entities.filter((entity) =>
+        entity.x >= x1 && entity.x < x2 && entity.y >= y1 && entity.y < y2
+      ).length;
+    }
+
+    function addQuadratRow(cellIndex) {
+      quadratSampleNo += 1;
+      const sampleCount = countEntitiesInQuadratCell(cellIndex);
+      quadratSamples.push({ cellIndex, count: sampleCount });
+
+      if (quadratSampleNo === 1) {
+        $("quadratRows").innerHTML = "";
+      }
+
+      const tr = document.createElement("tr");
+      tr.dataset.count = String(sampleCount);
+      tr.innerHTML = `
+        <td>${quadratSampleNo}</td>
+        <td>${sampleCount}</td>
+      `;
+      $("quadratRows").appendChild(tr);
+
+      $("estResult").textContent = t("quadratFormulaStatus");
+      $("estNote").textContent = t("totalCellsNote", { totalCells: $("totalCells").textContent });
+    }
+
+    function getQuadratCounts() {
+      return Array.from(document.querySelectorAll("#quadratRows tr[data-count]"))
+        .map((row) => Number(row.dataset.count))
+        .filter((value) => Number.isFinite(value) && value >= 0);
+    }
+
+    function getCorrectMethodEstimate() {
+      if (mode === "counting") {
+        return {
+          value: popSize,
+          mean: null,
+          note: t("directCorrectNote")
+        };
+      }
+
+      if (mode === "capture") {
+        const currentNetMarked = net.filter((n) => n.isMarked).length;
+        const currentCaptureData = {
+          markedTotal: markedCount,
+          captureTotal: net.length,
+          recapturedMarked: currentNetMarked
+        };
+
+        const data = currentCaptureData.captureTotal > 0
+          ? currentCaptureData
+          : lastCaptureForEstimate;
+
+        if (data && data.markedTotal > 0 && data.captureTotal > 0 && data.recapturedMarked > 0) {
+          return {
+            value: Math.round((data.markedTotal * data.captureTotal) / data.recapturedMarked),
+            mean: null,
+            note: t("captureCorrectNote", data)
+          };
+        }
+
+        return {
+          value: null,
+          mean: null,
+          note: t("captureNeedMarkedNote")
+        };
+      }
+
+      if (mode === "quadrat") {
+        const counts = getQuadratCounts();
+        const totalCells = parseInt($("totalCells").textContent, 10);
+
+        if (counts.length > 0 && totalCells > 0) {
+          const sum = counts.reduce((a, b) => a + b, 0);
+          const mean = sum / counts.length;
+          return {
+            value: Math.round(mean * totalCells),
+            mean,
+            note: t("quadratCorrectNote", { mean: mean.toFixed(2), totalCells })
+          };
+        }
+
+        return {
+          value: null,
+          mean: null,
+          note: t("quadratNeedDataNote")
+        };
+      }
+
+      return {
+        value: null,
+        mean: null,
+        note: t("noMethodNote")
+      };
+    }
+
+    function formatMethodError(correctValue) {
+      if (correctValue === null) return t("insufficientData");
+      const absError = Math.abs(correctValue - popSize);
+      const percent = ((absError / popSize) * 100).toFixed(1);
+      return currentLang === "en"
+        ? `${absError} ${t("organismUnit")}, ${percent}%`
+        : `${absError}${t("organismUnit")}, ${percent}%`;
+    }
+
+    function renderRevealResult() {
+      const estimate = Number($("studentEstimate").value);
+      const hasEstimate = Number.isFinite(estimate) && estimate >= 0;
+      const roundedEstimate = hasEstimate ? Math.round(estimate) : t("noInput");
+      const correct = getCorrectMethodEstimate();
+
+      $("truthBadge").textContent = popSize;
+
+      const correctValue = correct.value !== null ? correct.value : t("insufficientData");
+      const methodError = formatMethodError(correct.value);
+
+      const metric = (label, value) => `
+        <div class="metric-card">
+          <div class="metric-label">${label}</div>
+          <div class="metric-value">${value}</div>
+        </div>
+      `;
+
+      $("truthDisplay").innerHTML = `
+        <div class="metric-grid">
+          ${metric(t("yourEstimate"), roundedEstimate)}
+          ${metric(t("correctEstimate"), correctValue)}
+          ${metric(t("actualNumber"), popSize)}
+          ${metric(t("methodError"), methodError)}
+        </div>
+      `;
+
+      $("estNote").textContent = correct.note;
+    }
+
+    container.addEventListener("pointermove", moveNetPreview);
+    container.addEventListener("pointerleave", () => netPreview.classList.add("hidden"));
+    container.addEventListener("pointerdown", (event) => {
+      if (mode !== "capture") return;
+      event.preventDefault();
+      moveNetPreview(event);
+
+      const point = getCanvasPoint(event);
+      const now = Date.now();
+      const distance = Math.hypot(point.x - lastTap.x, point.y - lastTap.y);
+
+      if (now - lastTap.time < 340 && distance < 36) {
+        captureAt(point.x, point.y);
+        lastTap = { time: 0, x: -9999, y: -9999 };
+      } else {
+        lastTap = { time: now, x: point.x, y: point.y };
+      }
+    });
+
+    $("revealBtn").addEventListener("click", renderRevealResult);
+
+    document.querySelectorAll(".language-switcher button").forEach((btn) => {
+      btn.addEventListener("click", () => applyLanguage(btn.dataset.lang, { preserveResult: false }));
+    });
+
+    window.addEventListener("resize", resizeCanvas);
+
+    window.addEventListener("load", () => {
+      applyLanguage(currentLang);
+      resizeCanvas();
+      updateLevelButtons();
+      setSpeedLevel(speedLevel);
+      resetPopulation(popSize);
+      drawEntities();
+    });
+
+    const DEFAULT_SUBMIT_URL = 'https://script.google.com/macros/s/AKfycbxmcsIwiHkd4N0319ehX76NLNuUaedYDTkSLx-eLZJICKotDOnJfEo1zP5XbFYGmQ7v/exec'; // 可保留空白，或貼上預設 Google Apps Script Web App URL
+    const SUBMIT_URL_STORAGE_KEY = 'bioPopulationSubmitUrlV1';
+    const WORKSHEET_DRAFT_KEY = 'bioPopulationWorksheetDraftV1';
+
+    function worksheetFields() {
+      return Array.from(document.querySelectorAll('#worksheet input, #worksheet textarea, #worksheet select'));
+    }
+    function getRadioValue(name) {
+      return document.querySelector(`#worksheet input[name="${name}"]:checked`)?.value || '';
+    }
+    function getFieldValue(name) {
+      const el = document.querySelector(`#worksheet [name="${name}"]`);
+      return el ? el.value.trim() : '';
+    }
+
+    function getFixedValue(name) {
+      const el = document.querySelector(`#worksheet [data-fixed-name="${name}"]`);
+      return el ? el.textContent.trim() : '';
+    }
+
+    function getRecordValue(name) {
+      return getFixedValue(name) || getFieldValue(name);
+    }
+
+    function toggleWorksheet(forceOpen = null) {
+      const section = $('worksheet');
+      if (!section) return;
+      const shouldOpen = forceOpen === null ? section.classList.contains('collapsed') : Boolean(forceOpen);
+      section.classList.toggle('collapsed', !shouldOpen);
+
+      if (!shouldOpen) {
+        const panel = $('submitConfigPanel');
+        if (panel) panel.classList.add('hidden');
+      }
+    }
+    function collectWorksheetData() {
+      const records = [1, 2, 3, 4, 5].map((i) => ({
+        no: i,
+        method: getRecordValue(`record${i}_method`),
+        population: getRecordValue(`record${i}_population`),
+        speed: getRecordValue(`record${i}_speed`),
+        sampleCount: getRecordValue(`record${i}_sample`),
+        correctEstimate: getFieldValue(`record${i}_correct`),
+        actualNumber: getFieldValue(`record${i}_truth`),
+        errorCount: getFieldValue(`record${i}_errorCount`),
+        errorPercent: getFieldValue(`record${i}_errorPercent`)
+      }));
+      const lifeSituations = [
+        { situation: '校園草地上的蒲公英', method: getFieldValue('life_dandelion_method') },
+        { situation: '池塘中的魚', method: getFieldValue('life_fish_method') },
+        { situation: '操場旁一排樹木', method: getFieldValue('life_tree_method') },
+        { situation: '森林中的甲蟲', method: getFieldValue('life_beetle_method') },
+        { situation: '水田中的福壽螺', method: getFieldValue('life_apple_snail_method') }
+      ];
+      return {
+        submittedAt: new Date().toISOString(),
+        pageUrl: location.href,
+        className: getFieldValue('className'),
+        seatNo: getFieldValue('seatNo'),
+        studentName: getFieldValue('studentName'),
+        date: getFieldValue('date'),
+        records,
+        observations: {
+          sampleErrorChange: getRadioValue('q1_sample_error'),
+          sampleErrorReason: getFieldValue('q1_reason'),
+          directFeature: getFieldValue('q2_direct_feature'),
+          directExample: getFieldValue('q2_direct_example'),
+          captureProblem1: getFieldValue('q3_capture_problem1'),
+          captureProblem2: getFieldValue('q3_capture_problem2'),
+          quadratFeature: getFieldValue('q4_quadrat_feature'),
+          quadratExample: getFieldValue('q4_quadrat_example'),
+          unevenDistributionMethod: getRadioValue('q5_uneven_method'),
+          unevenDistributionReason: getFieldValue('q5_reason')
+        },
+        lifeSituations,
+        conclusion: {
+          feature1: getFieldValue('conclusion_feature1'),
+          feature2: getFieldValue('conclusion_feature2'),
+          feature3: getFieldValue('conclusion_feature3'),
+          reason: getFieldValue('conclusion_reason')
+        },
+        reflection: getFieldValue('reflection')
+      };
+    }
+    function collectWorksheetFormState() {
+      const state = {};
+      worksheetFields().forEach((el) => {
+        if (!el.name) return;
+        if (el.type === 'radio') {
+          if (el.checked) state[el.name] = el.value;
+        } else {
+          state[el.name] = el.value;
+        }
+      });
+      return state;
+    }
+    function applyWorksheetFormState(state) {
+      if (!state || typeof state !== 'object') return;
+      worksheetFields().forEach((el) => {
+        if (!el.name || !(el.name in state)) return;
+        if (el.type === 'radio') el.checked = el.value === state[el.name];
+        else el.value = state[el.name];
+      });
+    }
+    function setWorksheetStatus(message) {
+      const status = $('wsStatus');
+      if (status) status.textContent = message;
+    }
+    function saveWorksheetDraft(showMessage = false) {
+      localStorage.setItem(WORKSHEET_DRAFT_KEY, JSON.stringify(collectWorksheetFormState()));
+      if (showMessage) setWorksheetStatus('已暫存於本機瀏覽器');
+    }
+    function loadWorksheetDraft() {
+      const raw = localStorage.getItem(WORKSHEET_DRAFT_KEY);
+      if (!raw) return;
+      try {
+        applyWorksheetFormState(JSON.parse(raw));
+        setWorksheetStatus('已載入本機暫存資料');
+      } catch (error) {
+        console.warn('Failed to load worksheet draft:', error);
+      }
+    }
+    function clearWorksheetDraft() {
+      if (!confirm('確定要清除本機暫存與目前填寫內容嗎？')) return;
+      localStorage.removeItem(WORKSHEET_DRAFT_KEY);
+      worksheetFields().forEach((el) => {
+        if (el.type === 'radio') el.checked = false;
+        else if (el.name !== 'date') el.value = '';
+      });
+      setDefaultWorksheetDate();
+      setWorksheetStatus('已清除暫存');
+    }
+    async function copyWorksheetJson() {
+      const text = JSON.stringify(collectWorksheetData(), null, 2);
+      try {
+        await navigator.clipboard.writeText(text);
+        setWorksheetStatus('已複製備份資料');
+      } catch (error) {
+        setWorksheetStatus('複製失敗，請改用送出或截圖備份');
+      }
+    }
+
+    function getSubmitUrl() {
+      const saved = localStorage.getItem(SUBMIT_URL_STORAGE_KEY) || '';
+      return saved.trim() || DEFAULT_SUBMIT_URL.trim();
+    }
+
+    function applySubmitUrlFromQuery() {
+      const params = new URLSearchParams(window.location.search);
+      const fromQuery = params.get('submitUrl') || params.get('submit');
+      if (!fromQuery) return;
+
+      const decoded = decodeURIComponent(fromQuery).trim();
+      if (decoded) {
+        localStorage.setItem(SUBMIT_URL_STORAGE_KEY, decoded);
+        const input = $('submitUrlInput');
+        if (input) input.value = decoded;
+      }
+    }
+
+    function toggleSubmitConfigPanel(forceOpen = null) {
+      const panel = $('submitConfigPanel');
+      if (!panel) return;
+
+      const shouldOpen = forceOpen === null ? panel.classList.contains('hidden') : Boolean(forceOpen);
+      panel.classList.toggle('hidden', !shouldOpen);
+
+      if (shouldOpen) {
+        const input = $('submitUrlInput');
+        const status = $('submitConfigStatus');
+        if (input) input.value = getSubmitUrl();
+        if (status) status.textContent = getSubmitUrl() ? '目前已有送出網址設定。' : '目前尚未設定送出網址。';
+      }
+    }
+
+    function saveSubmitUrlSetting() {
+      const input = $('submitUrlInput');
+      const status = $('submitConfigStatus');
+      const url = input ? input.value.trim() : '';
+
+      if (!url) {
+        alert('請先貼上 Google Apps Script Web App URL。');
+        return;
+      }
+
+      if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec/.test(url)) {
+        if (!confirm('這個網址看起來不像 Google Apps Script Web App URL，仍然要儲存嗎？')) return;
+      }
+
+      localStorage.setItem(SUBMIT_URL_STORAGE_KEY, url);
+      if (status) status.textContent = '已儲存送出網址到本機瀏覽器。';
+    }
+
+    function clearSubmitUrlSetting() {
+      localStorage.removeItem(SUBMIT_URL_STORAGE_KEY);
+      const input = $('submitUrlInput');
+      const status = $('submitConfigStatus');
+      if (input) input.value = DEFAULT_SUBMIT_URL.trim();
+      if (status) status.textContent = DEFAULT_SUBMIT_URL.trim()
+        ? '已清除本機設定，會改用 HTML 內的預設網址。'
+        : '已清除本機設定，目前沒有送出網址。';
+    }
+
+    async function copyConfiguredSubmitLink() {
+      const url = getSubmitUrl();
+      const status = $('submitConfigStatus');
+
+      if (!url) {
+        alert('目前沒有送出網址，請先儲存。');
+        return;
+      }
+
+      const pageUrl = new URL(window.location.href);
+      pageUrl.searchParams.set('submitUrl', url);
+
+      try {
+        await navigator.clipboard.writeText(pageUrl.toString());
+        if (status) status.textContent = '已複製已設定網址。學生使用這個網址開啟後，會自動套用送出網址。';
+      } catch (error) {
+        if (status) status.textContent = '複製失敗，請手動複製網址列。';
+      }
+    }
+
+    async function submitWorksheet() {
+      const data = collectWorksheetData();
+      if (!data.className || !data.seatNo || !data.studentName) {
+        toggleWorksheet(true);
+        alert('請先填寫班級、座號與姓名。');
+        return;
+      }
+      const submitUrl = getSubmitUrl();
+
+      if (!submitUrl) {
+        toggleSubmitConfigPanel(true);
+        alert('尚未設定 Google Apps Script Web App URL。請點右下角齒輪設定送出網址。');
+        return;
+      }
+
+      saveWorksheetDraft(false);
+      setWorksheetStatus('送出中...');
+      try {
+        await fetch(submitUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(data)
+        });
+        localStorage.removeItem(WORKSHEET_DRAFT_KEY);
+        setWorksheetStatus('已送出。若老師端未收到，請使用「複製備份」。');
+        alert('已送出學習單');
+      } catch (error) {
+        console.error(error);
+        setWorksheetStatus('送出失敗，請檢查網路或使用「複製備份」。');
+        alert('送出失敗，請檢查網路或使用「複製備份」。');
+      }
+    }
+    function setDefaultWorksheetDate() {
+      const dateInput = $('wsDate');
+      if (dateInput && !dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
+    }
+    document.addEventListener('input', (event) => {
+      if (event.target.closest('#worksheet')) saveWorksheetDraft(false);
+    });
+    document.addEventListener('change', (event) => {
+      if (event.target.closest('#worksheet')) saveWorksheetDraft(false);
+    });
+    window.addEventListener('load', () => {
+      applySubmitUrlFromQuery();
+      setDefaultWorksheetDate();
+      loadWorksheetDraft();
+    });
+
+  </script>
+</body>
+</html>
 
